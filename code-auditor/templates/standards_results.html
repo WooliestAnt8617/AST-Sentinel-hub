@@ -1,0 +1,501 @@
+{% extends "base.html" %}
+
+{% block title %}Standards Audit Results — {{ audit.language | capitalize }} — CodeIntel{% endblock %}
+{% block meta_desc %}Standards compliance audit results: {{ audit.summary[:150] if audit.summary else 'Requirements-aware code audit results' }}{% endblock %}
+
+{% set active_page = "standards" %}
+
+{% block head_extra %}
+<style>
+/* Standards-specific styles */
+.compliance-hero {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2rem;
+    align-items: center;
+    padding: 1.75rem;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-lg);
+    margin-bottom: 1.5rem;
+}
+@media (max-width: 680px) { .compliance-hero { grid-template-columns: 1fr; text-align: center; } }
+
+.compliance-ring-wrap {
+    position: relative;
+    width: 140px;
+    height: 140px;
+    flex-shrink: 0;
+}
+.compliance-ring-wrap svg { width: 140px; height: 140px; transform: rotate(-90deg); }
+.compliance-ring__bg { fill: none; stroke: rgba(255,255,255,0.06); stroke-width: 10; }
+.compliance-ring__progress {
+    fill: none; stroke-width: 10; stroke-linecap: round;
+    transition: stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1);
+}
+.compliance-ring__center {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    text-align: center;
+}
+.compliance-ring__score {
+    font-size: 2rem; font-weight: 800; line-height: 1;
+    background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.compliance-ring__label { font-size: 0.625rem; font-weight: 700; color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase; }
+
+.compliance-summary__title { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; }
+.compliance-summary__text { color: var(--text-secondary); line-height: 1.65; margin-bottom: 1rem; max-width: 580px; }
+.compliance-badges { display: flex; flex-wrap: wrap; gap: 8px; }
+.comp-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: var(--radius-full);
+    font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+}
+.comp-badge--pass { background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.3); color: #22c55e; }
+.comp-badge--fail { background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; }
+.comp-badge--partial { background: rgba(234,179,8,0.12); border: 1px solid rgba(234,179,8,0.3); color: #eab308; }
+
+/* Checklist */
+.checklist { display: flex; flex-direction: column; gap: 0.75rem; }
+.checklist-item {
+    display: grid;
+    grid-template-columns: 36px 1fr auto;
+    gap: 0.75rem;
+    align-items: start;
+    padding: 1rem 1.25rem;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-md);
+    transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.checklist-item:hover { background: rgba(255,255,255,0.04); }
+.checklist-item--pass { border-left: 3px solid #22c55e; }
+.checklist-item--fail { border-left: 3px solid #ef4444; }
+.checklist-item--partial { border-left: 3px solid #eab308; }
+.checklist-item__icon {
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.125rem; flex-shrink: 0;
+}
+.checklist-item--pass .checklist-item__icon { background: rgba(34,197,94,0.12); }
+.checklist-item--fail .checklist-item__icon { background: rgba(239,68,68,0.12); }
+.checklist-item--partial .checklist-item__icon { background: rgba(234,179,8,0.12); }
+.checklist-item__body { min-width: 0; }
+.checklist-item__req { font-size: 0.875rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem; }
+.checklist-item__details { font-size: 0.8125rem; color: var(--text-secondary); line-height: 1.5; }
+.checklist-item__recommendation {
+    margin-top: 0.5rem; padding: 0.5rem 0.75rem;
+    background: rgba(129,140,248,0.07); border: 1px solid rgba(129,140,248,0.15);
+    border-radius: var(--radius-sm); font-size: 0.8125rem; color: var(--accent-primary);
+}
+.checklist-item__status { flex-shrink: 0; align-self: flex-start; padding-top: 2px; }
+
+/* Requirements used card */
+.req-used-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: 0.75rem;
+}
+.req-used-item {
+    padding: 0.75rem 1rem;
+    background: rgba(255,255,255,0.02); border: 1px solid var(--border-glass);
+    border-radius: var(--radius-sm);
+}
+.req-used-item__category {
+    font-size: 0.6875rem; font-weight: 700; color: var(--accent-primary);
+    text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.25rem;
+}
+.req-used-item__value { font-size: 0.8125rem; color: var(--text-secondary); }
+
+/* Score bar */
+.score-mini-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 0.5rem; }
+.score-mini-bar__label { font-size: 0.8125rem; color: var(--text-secondary); width: 160px; flex-shrink: 0; }
+.score-mini-bar__track {
+    flex: 1; height: 6px; background: rgba(255,255,255,0.06);
+    border-radius: var(--radius-full); overflow: hidden;
+}
+.score-mini-bar__fill {
+    height: 100%; border-radius: var(--radius-full);
+    transition: width 1s cubic-bezier(0.4,0,0.2,1);
+}
+.score-mini-bar__val { font-size: 0.8125rem; font-weight: 700; width: 36px; text-align: right; }
+/* Source type badge */
+.source-badge {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px;
+    border-radius: var(--radius-full); font-size: 0.75rem; font-weight: 600;
+    background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass);
+    color: var(--text-secondary);
+}
+/* ZIP file table */
+.file-results-table { width: 100%; border-collapse: collapse; }
+.file-results-table th {
+    font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted); padding: 0.5rem 0.75rem; text-align: left;
+    border-bottom: 1px solid var(--border-glass);
+}
+.file-results-table td {
+    font-size: 0.8125rem; padding: 0.625rem 0.75rem; color: var(--text-secondary);
+    border-bottom: 1px solid rgba(255,255,255,0.03); vertical-align: middle;
+}
+.file-results-table tr:hover td { background: rgba(255,255,255,0.02); }
+.file-results-table .filename-col { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-primary); }
+.score-chip {
+    display: inline-block; padding: 2px 8px; border-radius: var(--radius-full);
+    font-size: 0.75rem; font-weight: 700;
+}
+.score-chip--good { background: rgba(34,197,94,0.12); color: #22c55e; }
+.score-chip--avg  { background: rgba(234,179,8,0.12);  color: #eab308; }
+.score-chip--poor { background: rgba(239,68,68,0.12);  color: #ef4444; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <section class="page-section">
+
+        <!-- ── Compliance Hero ─────────────────────────────────────────── -->
+        <div class="compliance-hero glass-card--static">
+            <div class="compliance-ring-wrap">
+                <svg viewBox="0 0 140 140">
+                    <circle class="compliance-ring__bg" cx="70" cy="70" r="58"></circle>
+                    {% set score = audit.score_standards or 0 %}
+                    {% set ring_color = 'var(--score-excellent)' %}
+                    {% if score < 20 %}{% set ring_color = 'var(--score-critical)' %}
+                    {% elif score < 40 %}{% set ring_color = 'var(--score-poor)' %}
+                    {% elif score < 60 %}{% set ring_color = 'var(--score-average)' %}
+                    {% elif score < 80 %}{% set ring_color = 'var(--score-good)' %}
+                    {% endif %}
+                    <circle class="compliance-ring__progress" cx="70" cy="70" r="58"
+                        id="standards-ring"
+                        data-score="{{ score }}"
+                        style="stroke: {{ ring_color }};"
+                    ></circle>
+                </svg>
+                <div class="compliance-ring__center">
+                    <div class="compliance-ring__score" id="standards-score-val">0</div>
+                    <div class="compliance-ring__label">Standards</div>
+                </div>
+            </div>
+
+            <div>
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:0.5rem;">
+                    <h1 class="compliance-summary__title">
+                        <span class="gradient-text">Standards</span> Audit Results
+                    </h1>
+                    <span class="severity-badge severity-badge--{% if (audit.score_standards or 0) >= 80 %}info{% elif (audit.score_standards or 0) >= 60 %}low{% elif (audit.score_standards or 0) >= 40 %}medium{% else %}high{% endif %}">
+                        {{ audit.score_standards or 0 }}/100
+                    </span>
+                </div>
+                {% if standards_summary %}
+                <p class="compliance-summary__text">{{ standards_summary }}</p>
+                {% else %}
+                <p class="compliance-summary__text">{{ audit.summary or "No summary available." }}</p>
+                {% endif %}
+
+                <!-- Pass/Fail/Partial counts -->
+                {% set pass_count = requirements_checklist | selectattr('status', 'equalto', 'pass') | list | length %}
+                {% set fail_count = requirements_checklist | selectattr('status', 'equalto', 'fail') | list | length %}
+                {% set partial_count = requirements_checklist | selectattr('status', 'equalto', 'partial') | list | length %}
+                {% if requirements_checklist %}
+                <div class="compliance-badges">
+                    {% if pass_count > 0 %}
+                    <span class="comp-badge comp-badge--pass">✓ {{ pass_count }} Passed</span>
+                    {% endif %}
+                    {% if partial_count > 0 %}
+                    <span class="comp-badge comp-badge--partial">◐ {{ partial_count }} Partial</span>
+                    {% endif %}
+                    {% if fail_count > 0 %}
+                    <span class="comp-badge comp-badge--fail">✗ {{ fail_count }} Failed</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <div style="margin-top: 1rem; display:flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                    {% set source_icons = {
+                        'standards': '✍️',
+                        'standards-file': '📄',
+                        'standards-zip': '📦',
+                        'standards-github': '🔗'
+                    } %}
+                    {% set source_labels = {
+                        'standards': 'Paste',
+                        'standards-file': 'File Upload',
+                        'standards-zip': 'ZIP Archive',
+                        'standards-github': 'GitHub'
+                    } %}
+                    <span class="source-badge">
+                        {{ source_icons.get(audit.source_type, '📋') }}
+                        {{ source_labels.get(audit.source_type, 'Audit') }}
+                        {% if audit.filename %} · {{ audit.filename }}{% endif %}
+                    </span>
+                    <button id="export-json" class="btn btn--secondary btn--sm" data-audit-id="{{ audit.id }}">📄 Export JSON</button>
+                    <a href="/audit/standards" class="btn btn--secondary btn--sm">📋 New Standards Audit</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Requirements Used ──────────────────────────────────────── -->
+        {% if audit_requirements %}
+        <div class="glass-card glass-card--static" style="padding: 1.5rem; margin-bottom: 1.5rem;">
+            <h2 class="heading-sm" style="margin-bottom: 1rem;">📋 Requirements Audited Against</h2>
+            <div class="req-used-grid">
+                {% if audit_requirements.language_standard %}
+                <div class="req-used-item">
+                    <div class="req-used-item__category">📐 Style Standard</div>
+                    <div class="req-used-item__value">{{ audit_requirements.language_standard }}</div>
+                </div>
+                {% endif %}
+                {% if audit_requirements.security_framework %}
+                <div class="req-used-item">
+                    <div class="req-used-item__category">🔒 Security Framework</div>
+                    <div class="req-used-item__value">{{ audit_requirements.security_framework }}</div>
+                </div>
+                {% endif %}
+                {% if audit_requirements.complexity_threshold %}
+                <div class="req-used-item">
+                    <div class="req-used-item__category">🧮 Complexity</div>
+                    <div class="req-used-item__value">{{ audit_requirements.complexity_threshold }}</div>
+                </div>
+                {% endif %}
+                {% if audit_requirements.naming_convention %}
+                <div class="req-used-item">
+                    <div class="req-used-item__category">🏷️ Naming</div>
+                    <div class="req-used-item__value">{{ audit_requirements.naming_convention }}</div>
+                </div>
+                {% endif %}
+                {% if audit_requirements.additional_notes %}
+                <div class="req-used-item" style="grid-column: 1/-1;">
+                    <div class="req-used-item__category">📝 Additional</div>
+                    <div class="req-used-item__value">{{ audit_requirements.additional_notes }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- ── ZIP File Breakdown ──────────────────────────────────────── -->
+        {% if audit.source_type == 'standards-zip' and raw.get('file_results') %}
+        <div class="glass-card glass-card--static" style="padding: 1.5rem; margin-bottom: 1.5rem;">
+            <h2 class="heading-sm" style="margin-bottom: 1rem;">📦 Per-File Results ({{ raw.file_results | length }} files)</h2>
+            <div style="overflow-x: auto;">
+                <table class="file-results-table">
+                    <thead>
+                        <tr>
+                            <th>File</th>
+                            <th>Language</th>
+                            <th>Standards</th>
+                            <th>Findings</th>
+                            <th>Checklist</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for fr in raw.file_results %}
+                        <tr>
+                            <td class="filename-col">{{ fr.filename }}</td>
+                            <td>{{ fr.language | capitalize }}</td>
+                            <td>
+                                {% set s = fr.scores.get('standards', 0) if fr.scores else 0 %}
+                                <span class="score-chip {% if s >= 70 %}score-chip--good{% elif s >= 40 %}score-chip--avg{% else %}score-chip--poor{% endif %}">{{ s }}</span>
+                            </td>
+                            <td>{{ fr.findings_count }}</td>
+                            <td>{{ fr.checklist_pass }}/{{ fr.checklist_total }} passed</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if raw.get('errors') and raw.errors | length > 0 %}
+            <p class="text-sm" style="margin-top:0.75rem;color:var(--text-muted);">
+                ⚠️ {{ raw.errors | length }} file(s) could not be analyzed due to errors.
+            </p>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- ── Score Cards ────────────────────────────────────────────── -->
+        <div class="glass-card glass-card--static" style="padding: 1.5rem; margin-bottom: 1.5rem;">
+            <h2 class="heading-sm" style="margin-bottom: 1.25rem;">📊 Quality Scores</h2>
+            {% set score_bars = [
+                ("Security", audit.score_security or 0, "var(--severity-critical)"),
+                ("Accessibility", audit.score_accessibility or 0, "var(--accent-primary)"),
+                ("Performance", audit.score_performance or 0, "var(--score-good)"),
+                ("Maintainability", audit.score_maintainability or 0, "var(--score-average)"),
+                ("Standards Compliance", audit.score_standards or 0, "var(--gradient-end)"),
+                ("Overall", audit.score_overall or 0, "var(--score-excellent)")
+            ] %}
+            {% for label, score, color in score_bars %}
+            <div class="score-mini-bar">
+                <div class="score-mini-bar__label">{{ label }}</div>
+                <div class="score-mini-bar__track">
+                    <div class="score-mini-bar__fill" data-target="{{ score }}" style="width: 0%; background: {{ color }};"></div>
+                </div>
+                <div class="score-mini-bar__val" style="color: {{ color }};">{{ score }}</div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- ── Requirements Checklist ─────────────────────────────────── -->
+        {% if requirements_checklist %}
+        <div style="margin-bottom: 2rem;">
+            <h2 class="heading-md" style="margin-bottom: 1.25rem;">
+                📋 Requirements Checklist
+                <span class="text-sm" style="font-weight: 400; margin-left: 8px;">({{ requirements_checklist | length }} requirement{{ 's' if requirements_checklist | length != 1 else '' }})</span>
+            </h2>
+            <div class="checklist">
+                {% for item in requirements_checklist %}
+                <div class="checklist-item checklist-item--{{ item.status }}">
+                    <div class="checklist-item__icon">
+                        {% if item.status == 'pass' %}✅
+                        {% elif item.status == 'fail' %}❌
+                        {% else %}⚠️
+                        {% endif %}
+                    </div>
+                    <div class="checklist-item__body">
+                        <div class="checklist-item__req">{{ item.requirement }}</div>
+                        {% if item.details %}
+                        <div class="checklist-item__details">{{ item.details }}</div>
+                        {% endif %}
+                        {% if item.recommendation and item.status != 'pass' %}
+                        <div class="checklist-item__recommendation">
+                            💡 <strong>Fix:</strong> {{ item.recommendation }}
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="checklist-item__status">
+                        <span class="comp-badge comp-badge--{{ item.status }}">
+                            {% if item.status == 'pass' %}Pass
+                            {% elif item.status == 'fail' %}Fail
+                            {% else %}Partial
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- ── Findings ───────────────────────────────────────────────── -->
+        <div class="findings-section">
+            <h2 class="heading-md" style="margin-bottom: 1.5rem;">
+                🔎 Detailed Findings
+                <span class="text-sm" style="font-weight: 400; margin-left: 8px;">({{ audit.findings | length }} total)</span>
+            </h2>
+
+            {% if not grouped_findings %}
+            <div class="empty-state glass-card glass-card--static">
+                <div class="empty-state__icon">✅</div>
+                <div class="empty-state__title">No Issues Found</div>
+                <p class="empty-state__text">Great job! The analysis didn't detect any notable issues against your requirements.</p>
+            </div>
+            {% endif %}
+
+            {% for severity in severity_order %}
+            {% if severity in grouped_findings %}
+            <div class="severity-group">
+                <div class="severity-group__header severity-group__header--{{ severity }}">
+                    <span class="severity-dot severity-dot--{{ severity }}"></span>
+                    {{ severity | upper }}
+                    <span class="severity-count">{{ grouped_findings[severity] | length }} issue{{ 's' if grouped_findings[severity] | length != 1 else '' }}</span>
+                </div>
+
+                {% for finding in grouped_findings[severity] %}
+                <div class="finding-card glass-card">
+                    <div class="finding-card__header">
+                        <span class="severity-badge severity-badge--{{ finding.severity }}">{{ finding.severity }}</span>
+                        <span class="finding-card__title">{{ finding.title }}</span>
+                        <span class="finding-card__category">{{ finding.category }}</span>
+                        <span class="finding-card__chevron">▶</span>
+                    </div>
+                    <div class="finding-card__body">
+                        {% if finding.description %}
+                        <p class="finding-card__description">{{ finding.description }}</p>
+                        {% endif %}
+                        {% if finding.line_start %}
+                        <p class="finding-card__lines">
+                            📍 Lines {{ finding.line_start }}{% if finding.line_end and finding.line_end != finding.line_start %}-{{ finding.line_end }}{% endif %}
+                            {% if finding.get('source_file') %} · {{ finding.source_file }}{% endif %}
+                        </p>
+                        {% endif %}
+                        {% if finding.suggestion %}
+                        <div class="finding-card__suggestion">
+                            <div class="finding-card__suggestion-label">💡 Suggestion</div>
+                            <p class="finding-card__suggestion-text">{{ finding.suggestion }}</p>
+                        </div>
+                        {% endif %}
+                        {% if finding.code_snippet %}
+                        <div class="code-block"><code>{{ finding.code_snippet }}</code></div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+
+        <!-- Actions -->
+        <div style="text-align: center; margin-top: 3rem; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+            <a href="/audit/standards" class="btn btn--primary">📋 New Standards Audit</a>
+            <a href="/audit" class="btn btn--secondary">⚡ General Audit</a>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Animate standards ring
+    const ring = document.getElementById('standards-ring');
+    const scoreVal = document.getElementById('standards-score-val');
+    if (ring) {
+        const r = 58;
+        const circ = 2 * Math.PI * r;
+        const score = parseInt(ring.dataset.score || '0', 10);
+        ring.style.strokeDasharray = circ;
+        ring.style.strokeDashoffset = circ;
+        setTimeout(() => {
+            ring.style.strokeDashoffset = circ - (score / 100) * circ;
+        }, 100);
+        // Animate number
+        let current = 0;
+        const duration = 1200;
+        const step = duration / score || 1;
+        const timer = setInterval(() => {
+            current = Math.min(current + 1, score);
+            if (scoreVal) scoreVal.textContent = current;
+            if (current >= score) clearInterval(timer);
+        }, step);
+    }
+
+    // Animate score bars
+    document.querySelectorAll('.score-mini-bar__fill').forEach(bar => {
+        const target = parseInt(bar.dataset.target || '0', 10);
+        setTimeout(() => { bar.style.width = target + '%'; }, 200);
+    });
+
+    // Finding cards expand
+    document.querySelectorAll('.finding-card').forEach(card => {
+        const header = card.querySelector('.finding-card__header');
+        if (header) header.addEventListener('click', () => card.classList.toggle('finding-card--expanded'));
+    });
+
+    // Export JSON
+    const jsonBtn = document.getElementById('export-json');
+    if (jsonBtn) {
+        jsonBtn.addEventListener('click', async () => {
+            const auditId = jsonBtn.dataset.auditId;
+            try {
+                const response = await fetch(`/api/audit/${auditId}/export`);
+                const data = await response.json();
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = `standards-audit-${auditId.slice(0,8)}.json`;
+                document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+                showToast('JSON report downloaded!', 'success');
+            } catch { showToast('Failed to export report.', 'error'); }
+        });
+    }
+});
+</script>
+{% endblock %}

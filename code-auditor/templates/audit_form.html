@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Start Audit — CodeIntel{% endblock %}
+{% block meta_desc %}Paste code or upload a ZIP archive for an AI-powered code audit covering security, performance, accessibility, and best practices.{% endblock %}
+
+{% set active_page = "audit" %}
+
+{% block content %}
+<div class="container">
+    <section class="page-section">
+        <div class="audit-container">
+            <h1 class="heading-lg" style="margin-bottom: 0.5rem;">
+                <span class="gradient-text">Code Auditor</span>
+            </h1>
+            <p class="text-body" style="margin-bottom: 2rem;">
+                Paste code directly or upload a ZIP archive for AI-powered analysis.
+            </p>
+
+            <!-- Tab Bar -->
+            <div class="tab-bar">
+                <button type="button" class="tab-btn tab-btn--active" data-tab="paste">
+                    ✍️ Paste Code
+                </button>
+                <button type="button" class="tab-btn" data-tab="upload">
+                    📦 Upload ZIP
+                </button>
+            </div>
+
+            <!-- Paste Tab -->
+            <div class="tab-panel tab-panel--active" data-tab-panel="paste">
+                <form id="paste-form" action="/audit/paste" method="POST">
+                    <div class="form-group">
+                        <label class="form-label" for="filename-input">Filename (optional)</label>
+                        <input
+                            type="text"
+                            id="filename-input"
+                            name="filename"
+                            class="form-input"
+                            placeholder="e.g., main.py, app.js, index.html"
+                            autocomplete="off"
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="code-input">Code</label>
+                        <textarea
+                            id="code-input"
+                            name="code"
+                            class="form-input code-textarea"
+                            placeholder="Paste your code here...
+
+# Example:
+def hello_world():
+    print('Hello, World!')
+
+if __name__ == '__main__':
+    hello_world()"
+                            spellcheck="false"
+                            autocomplete="off"
+                        ></textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn--primary btn--lg" style="width: 100%;">
+                        ⚡ Analyze Code
+                    </button>
+                </form>
+            </div>
+
+            <!-- Upload Tab -->
+            <div class="tab-panel" data-tab-panel="upload">
+                <form id="upload-form" action="/audit/upload" method="POST" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <div class="file-upload-zone" id="upload-zone">
+                            <input type="file" id="file-input" name="file" accept=".zip">
+                            <div class="file-upload-zone__icon">📁</div>
+                            <p class="file-upload-zone__text">
+                                <strong>Drop your ZIP file here</strong> or click to browse
+                            </p>
+                            <p class="file-upload-zone__hint">
+                                Maximum 10MB · Only .zip files · Up to 20 source files analyzed
+                            </p>
+                        </div>
+                        <div id="file-preview" style="display: none;"></div>
+                    </div>
+
+                    <button type="submit" class="btn btn--primary btn--lg" style="width: 100%;">
+                        📦 Upload & Analyze
+                    </button>
+                </form>
+            </div>
+
+            <!-- Info Card -->
+            <div class="glass-card" style="padding: 1.5rem; margin-top: 2rem;">
+                <h3 class="heading-sm" style="margin-bottom: 0.75rem;">💡 What gets analyzed?</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                    <div>
+                        <p class="text-xs" style="margin-bottom: 0.5rem;">Categories</p>
+                        <div class="topics-list">
+                            <span class="topic-tag">🔒 Security</span>
+                            <span class="topic-tag">♿ Accessibility</span>
+                            <span class="topic-tag">⚡ Performance</span>
+                            <span class="topic-tag">🔧 Maintainability</span>
+                            <span class="topic-tag">✅ Best Practices</span>
+                            <span class="topic-tag">⚠️ Error Handling</span>
+                        </div>
+                    </div>
+                    <div>
+                        <p class="text-xs" style="margin-bottom: 0.5rem;">Supported Languages</p>
+                        <p class="text-sm">Python, JavaScript, TypeScript, Java, Go, Rust, C/C++, C#, Ruby, PHP, HTML/CSS, SQL, and 40+ more.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}

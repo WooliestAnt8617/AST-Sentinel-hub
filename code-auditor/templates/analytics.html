@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics Dashboard — CodeIntel{% endblock %}
+{% block meta_desc %}Aggregate analytics across all code audits: language distributions, severity trends, score tracking, and platform health insights.{% endblock %}
+
+{% set active_page = "analytics" %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="container" id="analytics-page">
+    <section class="page-section">
+        <h1 class="heading-lg" style="margin-bottom: 0.5rem;">
+            <span class="gradient-text">Analytics Dashboard</span>
+        </h1>
+        <p class="text-body" style="margin-bottom: 2rem;">
+            Aggregate insights across all code audits performed on the platform.
+        </p>
+
+        <!-- Impact Counters -->
+        <div class="counter-grid">
+            <div class="counter-card glass-card glass-card--static">
+                <div class="counter-card__icon counter-card__icon--audits">📊</div>
+                <div class="counter-card__value gradient-text" id="counter-audits" data-count-target="0">0</div>
+                <div class="counter-card__label">Total Audits</div>
+            </div>
+            <div class="counter-card glass-card glass-card--static">
+                <div class="counter-card__icon counter-card__icon--languages">🌐</div>
+                <div class="counter-card__value" id="counter-languages" data-count-target="0" style="color: var(--score-excellent);">0</div>
+                <div class="counter-card__label">Unique Languages</div>
+            </div>
+            <div class="counter-card glass-card glass-card--static">
+                <div class="counter-card__icon counter-card__icon--critical">🔴</div>
+                <div class="counter-card__value" id="counter-critical" data-count-target="0" style="color: var(--severity-critical);">0</div>
+                <div class="counter-card__label">Critical Issues Found</div>
+            </div>
+            <div class="counter-card glass-card glass-card--static">
+                <div class="counter-card__icon counter-card__icon--files">📄</div>
+                <div class="counter-card__value" id="counter-files" data-count-target="0" style="color: var(--accent-secondary);">0</div>
+                <div class="counter-card__label">Total Files Analyzed</div>
+            </div>
+        </div>
+
+        <!-- Charts Grid -->
+        <div class="charts-grid">
+            <div class="chart-card glass-card glass-card--static">
+                <div class="chart-card__header">
+                    <h3 class="chart-card__title">🏆 Top Languages</h3>
+                </div>
+                <div class="chart-canvas-wrapper">
+                    <canvas id="chart-languages"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-card glass-card glass-card--static">
+                <div class="chart-card__header">
+                    <h3 class="chart-card__title">⚡ Severity Distribution</h3>
+                </div>
+                <div class="chart-canvas-wrapper">
+                    <canvas id="chart-severity"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-card glass-card glass-card--static">
+                <div class="chart-card__header">
+                    <h3 class="chart-card__title">📂 Category Breakdown</h3>
+                </div>
+                <div class="chart-canvas-wrapper">
+                    <canvas id="chart-categories"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-card glass-card glass-card--static">
+                <div class="chart-card__header">
+                    <h3 class="chart-card__title">📈 Scores Over Time</h3>
+                </div>
+                <div class="chart-canvas-wrapper">
+                    <canvas id="chart-scores-time"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Heatmap Section -->
+        <div class="heatmap-section">
+            <h2 class="heading-md" style="margin-bottom: 1rem;">🔥 Topic × Severity Heatmap</h2>
+            <div class="glass-card glass-card--static" style="padding: 1.5rem; overflow-x: auto;">
+                <div id="heatmap-container">
+                    <div class="empty-state">
+                        <div class="loading-spinner-lg" style="margin: 0 auto;"></div>
+                        <p class="text-sm" style="margin-top: 1rem;">Loading heatmap data...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Platform Health -->
+        <div style="margin-top: 2rem;">
+            <h2 class="heading-md" style="margin-bottom: 1rem;">🏥 Platform Health</h2>
+            <div class="health-grid" id="health-container">
+                <div class="health-item glass-card glass-card--static" style="text-align: center; padding: 2rem;">
+                    <div class="loading-spinner-lg" style="margin: 0 auto;"></div>
+                    <p class="text-sm" style="margin-top: 1rem;">Loading health metrics...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Empty State (if no data) -->
+        <div id="dashboard-loading" style="display: none;"></div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/charts.js"></script>
+{% endblock %}

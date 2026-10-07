@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}CodeIntel — AI-Powered Code Intelligence Platform{% endblock %}
+{% block meta_desc %}Paste code or upload projects for instant AI-powered security audits, performance analysis, and quality insights. Powered by Google Gemini.{% endblock %}
+
+{% set active_page = "home" %}
+
+{% block content %}
+<div class="container">
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero__badge">
+            <span class="hero__badge-dot"></span>
+            <span>AI-Powered Code Analysis</span>
+        </div>
+
+        <h1 class="hero__title heading-xl">
+            <span class="gradient-text">Intelligent Code</span><br>
+            Auditing & Analytics
+        </h1>
+
+        <p class="hero__subtitle">
+            Paste code or upload entire projects for instant AI-powered security analysis,
+            performance audits, and quality insights. Powered by Google Gemini.
+        </p>
+
+        <div class="hero__actions">
+            <a href="/audit" class="btn btn--primary btn--lg">
+                ⚡ Start Auditing
+            </a>
+            <a href="/analytics" class="btn btn--secondary btn--lg">
+                📊 View Analytics
+            </a>
+        </div>
+
+        <div class="hero__stats">
+            <div class="hero__stat" data-animate>
+                <div class="hero__stat-value gradient-text" data-count-target="{{ total_audits }}">0</div>
+                <div class="hero__stat-label">Audits Performed</div>
+            </div>
+            <div class="hero__stat" data-animate>
+                <div class="hero__stat-value gradient-text">6</div>
+                <div class="hero__stat-label">Audit Categories</div>
+            </div>
+            <div class="hero__stat" data-animate>
+                <div class="hero__stat-value gradient-text">50+</div>
+                <div class="hero__stat-label">Languages Supported</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="page-section">
+        <h2 class="heading-lg" style="text-align: center; margin-bottom: 0.75rem;" data-animate>
+            <span class="gradient-text">Powerful Features</span>
+        </h2>
+        <p class="text-body" style="text-align: center; max-width: 560px; margin: 0 auto 2rem;" data-animate>
+            Everything you need to analyze, improve, and track your code quality over time.
+        </p>
+
+        <div class="features-grid">
+            <a href="/audit" class="feature-card glass-card" data-animate>
+                <div class="feature-card__icon">🔍</div>
+                <h3 class="feature-card__title heading-md">Code Auditor</h3>
+                <p class="feature-card__desc">
+                    Paste code snippets or upload ZIP archives for comprehensive AI-powered audits
+                    covering security, performance, accessibility, and best practices.
+                </p>
+            </a>
+
+            <a href="/analytics" class="feature-card glass-card" data-animate>
+                <div class="feature-card__icon">📊</div>
+                <h3 class="feature-card__title heading-md">Global Analytics</h3>
+                <p class="feature-card__desc">
+                    Track aggregate insights across all audits — top languages, severity distributions,
+                    score trends, and topic-severity heatmaps.
+                </p>
+            </a>
+
+            <a href="/audit/standards" class="feature-card glass-card" data-animate>
+                <div class="feature-card__icon">📋</div>
+                <h3 class="feature-card__title heading-md">Standards Audit</h3>
+                <p class="feature-card__desc">
+                    Audit code against your own requirements — OWASP, PEP 8, SOLID, complexity thresholds,
+                    naming conventions. Get a compliance checklist and a Standards score.
+                </p>
+            </a>
+
+            <div class="feature-card glass-card" data-animate>
+                <div class="feature-card__icon">🧠</div>
+                <h3 class="feature-card__title heading-md">AI-Powered Analysis</h3>
+                <p class="feature-card__desc">
+                    Leverages Google Gemini to act as a senior code reviewer, detecting issues
+                    across security, maintainability, and error-handling categories.
+                </p>
+            </div>
+
+            <div class="feature-card glass-card" data-animate>
+                <div class="feature-card__icon">📦</div>
+                <h3 class="feature-card__title heading-md">Project Scanning</h3>
+                <p class="feature-card__desc">
+                    Upload ZIP archives to audit entire projects. View per-file results,
+                    aggregate scores, and a complete file tree with detected languages.
+                </p>
+            </div>
+
+            <div class="feature-card glass-card" data-animate>
+                <div class="feature-card__icon">📈</div>
+                <h3 class="feature-card__title heading-md">Score Tracking</h3>
+                <p class="feature-card__desc">
+                    Monitor your code quality over time with visual score rings, trend charts,
+                    and improvement indicators across all audit categories.
+                </p>
+            </div>
+
+            <div class="feature-card glass-card" data-animate>
+                <div class="feature-card__icon">📄</div>
+                <h3 class="feature-card__title heading-md">Export Reports</h3>
+                <p class="feature-card__desc">
+                    Download detailed audit reports as JSON or Markdown files for documentation,
+                    team reviews, and compliance purposes.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="page-section" style="text-align: center;" data-animate>
+        <div class="glass-card glass-card--elevated" style="padding: 4rem 2rem; max-width: 700px; margin: 0 auto;">
+            <h2 class="heading-lg" style="margin-bottom: 1rem;">
+                Ready to <span class="gradient-text">Audit Your Code</span>?
+            </h2>
+            <p class="text-body" style="margin-bottom: 2rem;">
+                Start your first audit in seconds. Paste code directly or upload a project archive.
+            </p>
+            <a href="/audit" class="btn btn--primary btn--lg">
+                ⚡ Launch Auditor
+            </a>
+        </div>
+    </section>
+</div>
+{% endblock %}

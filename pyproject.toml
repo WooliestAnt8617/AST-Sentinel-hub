@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ast-sentinel"
+version = "0.1.0"
+description = "Deterministic Static Source Code Security & Vulnerability Audit Engine"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+    "pydantic>=2.0.0",
+    "python-multipart>=0.0.6",
+    "jinja2>=3.1.2",
+    "rich>=13.5.2",
+    "aiofiles>=23.2.1",
+    "sqlalchemy>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.1",
+    "httpx>=0.24.1",
+    "ruff>=0.0.285",
+]
+
+[project.scripts]
+ast-sentinel = "ast_sentinel.main:run"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+exclude = ["tests/fixtures/malformed_sample.py"]

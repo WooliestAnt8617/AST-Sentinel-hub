@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AST-Sentinel — Scan Report</title>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #1a1d27;
+            --border: #2a2d3a;
+            --text: #e1e4ed;
+            --text-dim: #8b8fa3;
+            --critical: #ff4757;
+            --high: #ff6b6b;
+            --medium: #ffc048;
+            --low: #4ecdc4;
+            --info: #74b9ff;
+            --accent: #6c5ce7;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 2rem;
+        }
+        .container { max-width: 1100px; margin: 0 auto; }
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 0.25rem;
+            background: linear-gradient(135deg, var(--accent), var(--info));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .meta { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 2rem; }
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.2rem;
+            text-align: center;
+        }
+        .card .value { font-size: 2rem; font-weight: 700; }
+        .card .label { font-size: 0.8rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+        .sev-critical { color: var(--critical); }
+        .sev-high { color: var(--high); }
+        .sev-medium { color: var(--medium); }
+        .sev-low { color: var(--low); }
+        .sev-info { color: var(--info); }
+        .grade-badge {
+            display: inline-block;
+            font-size: 2.5rem;
+            font-weight: 800;
+            width: 70px;
+            height: 70px;
+            line-height: 70px;
+            border-radius: 50%;
+            text-align: center;
+            background: var(--surface);
+            border: 3px solid var(--accent);
+        }
+        .findings-section { margin-top: 2rem; }
+        .finding {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem 1.2rem;
+            margin-bottom: 0.75rem;
+            border-left: 4px solid var(--border);
+        }
+        .finding.CRITICAL { border-left-color: var(--critical); }
+        .finding.HIGH { border-left-color: var(--high); }
+        .finding.MEDIUM { border-left-color: var(--medium); }
+        .finding.LOW { border-left-color: var(--low); }
+        .finding.INFO { border-left-color: var(--info); }
+        .finding-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+        .finding-rule { font-weight: 600; }
+        .finding-sev { font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+        .finding-sev.CRITICAL { background: var(--critical); color: #fff; }
+        .finding-sev.HIGH { background: var(--high); color: #fff; }
+        .finding-sev.MEDIUM { background: var(--medium); color: #000; }
+        .finding-sev.LOW { background: var(--low); color: #000; }
+        .finding-sev.INFO { background: var(--info); color: #000; }
+        .finding-location { font-size: 0.8rem; color: var(--text-dim); }
+        .finding-message { margin-top: 0.4rem; }
+        .finding-remediation { margin-top: 0.4rem; font-size: 0.85rem; color: var(--info); }
+        details > summary { cursor: pointer; color: var(--text-dim); font-size: 0.85rem; }
+        pre.snippet {
+            background: #13151d;
+            padding: 0.6rem;
+            border-radius: 4px;
+            font-size: 0.82rem;
+            overflow-x: auto;
+            margin-top: 0.4rem;
+        }
+        .no-findings { text-align: center; padding: 3rem; color: #2ed573; font-size: 1.2rem; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🛡️ AST-Sentinel Scan Report</h1>
+    <p class="meta">Scan ID: {{ result.scan_id }} &middot; {{ result.timestamp }}</p>
+
+    <div class="summary-grid">
+        <div class="card">
+            <div class="value">{{ result.summary.total_files }}</div>
+            <div class="label">Files</div>
+        </div>
+        <div class="card">
+            <div class="value">{{ result.summary.total_findings }}</div>
+            <div class="label">Findings</div>
+        </div>
+        <div class="card">
+            <div class="value sev-critical">{{ result.summary.critical_count }}</div>
+            <div class="label">Critical</div>
+        </div>
+        <div class="card">
+            <div class="value sev-high">{{ result.summary.high_count }}</div>
+            <div class="label">High</div>
+        </div>
+        <div class="card">
+            <div class="value sev-medium">{{ result.summary.medium_count }}</div>
+            <div class="label">Medium</div>
+        </div>
+        <div class="card">
+            <div class="value sev-low">{{ result.summary.low_count }}</div>
+            <div class="label">Low</div>
+        </div>
+        <div class="card">
+            <div class="grade-badge">{{ grade }}</div>
+            <div class="label" style="margin-top:0.5rem">Risk Grade</div>
+        </div>
+    </div>
+
+    <div class="findings-section">
+        {% if result.summary.total_findings == 0 %}
+        <div class="no-findings">✓ No security findings detected.</div>
+        {% else %}
+        {% for fa in result.files_analyzed %}
+            {% for finding in fa.findings %}
+            <div class="finding {{ finding.severity.value }}">
+                <div class="finding-header">
+                    <span class="finding-rule">{{ finding.rule_name }} <span class="finding-location">({{ finding.location.file_path }}:{{ finding.location.line_number }})</span></span>
+                    <span class="finding-sev {{ finding.severity.value }}">{{ finding.severity.value }}</span>
+                </div>
+                <div class="finding-message">{{ finding.message }}</div>
+                {% if finding.remediation %}
+                <div class="finding-remediation">💡 {{ finding.remediation }}</div>
+                {% endif %}
+                {% if finding.code_snippet %}
+                <details>
+                    <summary>View code snippet</summary>
+                    <pre class="snippet">{{ finding.code_snippet }}</pre>
+                </details>
+                {% endif %}
+            </div>
+            {% endfor %}
+        {% endfor %}
+        {% endif %}
+    </div>
+</div>
+</body>
+</html>

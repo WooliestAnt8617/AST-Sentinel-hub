@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Results — {{ audit.language | capitalize }} — CodeIntel{% endblock %}
+{% block meta_desc %}Code audit results: {{ audit.summary[:150] if audit.summary else 'AI-powered code analysis results' }}{% endblock %}
+
+{% set active_page = "audit" %}
+
+{% block content %}
+<div class="container">
+    <section class="page-section">
+        <!-- Audit Summary -->
+        <div class="audit-summary glass-card glass-card--static">
+            <div style="display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+                <div>
+                    <h1 class="heading-lg" style="margin-bottom: 0.5rem;">
+                        <span class="gradient-text">Audit Results</span>
+                    </h1>
+                    <p class="text-body" style="max-width: 600px;">
+                        {{ audit.summary or "No summary available." }}
+                    </p>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button id="export-json" class="btn btn--secondary btn--sm" data-audit-id="{{ audit.id }}">
+                        📄 Export JSON
+                    </button>
+                </div>
+            </div>
+
+            <div class="audit-meta">
+                <div class="audit-meta__item">
+                    🔤 <strong>{{ audit.language | capitalize }}</strong>
+                </div>
+                {% if audit.filename %}
+                <div class="audit-meta__item">
+                    📄 {{ audit.filename }}
+                </div>
+                {% endif %}
+                <div class="audit-meta__item">
+                    📦 {{ audit.source_type | capitalize }}
+                </div>
+                <div class="audit-meta__item">
+                    📏 {{ "{:,}".format(audit.code_length or 0) }} chars
+                </div>
+                <div class="audit-meta__item">
+                    🕐 {{ audit.created_at[:19] | replace("T", " ") }}
+                </div>
+                {% if audit.complexity_level %}
+                <div class="audit-meta__item">
+                    <span class="severity-badge severity-badge--{% if audit.complexity_level == 'advanced' %}high{% elif audit.complexity_level == 'intermediate' %}medium{% else %}info{% endif %}">
+                        {{ audit.complexity_level }}
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Score Cards -->
+        <div class="score-cards" style="margin-bottom: 2rem;">
+            {% set score_items = [
+                ("security", audit.score_security or 0),
+                ("accessibility", audit.score_accessibility or 0),
+                ("performance", audit.score_performance or 0),
+                ("maintainability", audit.score_maintainability or 0),
+                ("overall", audit.score_overall or 0)
+            ] %}
+
+            {% for name, score in score_items %}
+            <div class="score-card glass-card glass-card--static">
+                <div class="score-ring">
+                    <svg viewBox="0 0 120 120">
+                        <circle class="score-ring__bg" cx="60" cy="60" r="50"></circle>
+                        <circle class="score-ring__progress" cx="60" cy="60" r="50"
+                            data-score="{{ score }}"
+                            style="stroke: {% if score >= 80 %}var(--score-excellent){% elif score >= 60 %}var(--score-good){% elif score >= 40 %}var(--score-average){% elif score >= 20 %}var(--score-poor){% else %}var(--score-critical){% endif %};">
+                        </circle>
+                    </svg>
+                    <div class="score-ring__value">0</div>
+                </div>
+                <div class="score-card__label">
+                    {% if name == "overall" %}<strong>{{ name }}</strong>{% else %}{{ name }}{% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Topics -->
+        {% if audit.topics %}
+        <div class="glass-card glass-card--static" style="padding: 1.5rem; margin-bottom: 2rem;">
+            <h3 class="heading-sm" style="margin-bottom: 0.75rem;">🏷️ Detected Topics</h3>
+            <div class="topics-list">
+                {% for topic in audit.topics %}
+                <span class="topic-tag">{{ topic }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- File Results (for ZIP audits) -->
+        {% if raw.get('file_results') %}
+        <div class="glass-card glass-card--static" style="padding: 1.5rem; margin-bottom: 2rem;">
+            <h3 class="heading-sm" style="margin-bottom: 1rem;">📁 Files Analyzed</h3>
+            <div class="file-tree">
+                {% for fr in raw.file_results %}
+                <div class="file-tree__item">
+                    <span>📄</span>
+                    <span style="flex: 1;">{{ fr.filename }}</span>
+                    <span class="severity-badge severity-badge--{% if fr.scores.overall >= 80 %}info{% elif fr.scores.overall >= 60 %}low{% elif fr.scores.overall >= 40 %}medium{% else %}high{% endif %}">
+                        {{ fr.scores.overall or 0 }}/100
+                    </span>
+                    <span class="text-xs" style="text-transform: none; letter-spacing: 0;">{{ fr.language }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Findings Section -->
+        <div class="findings-section">
+            <h2 class="heading-md" style="margin-bottom: 1.5rem;">
+                🔎 Findings
+                <span class="text-sm" style="font-weight: 400; margin-left: 8px;">
+                    ({{ audit.findings | length }} total)
+                </span>
+            </h2>
+
+            {% if not grouped_findings %}
+            <div class="empty-state glass-card glass-card--static">
+                <div class="empty-state__icon">✅</div>
+                <div class="empty-state__title">No Issues Found</div>
+                <p class="empty-state__text">Great job! The analysis didn't detect any notable issues.</p>
+            </div>
+            {% endif %}
+
+            {% for severity in severity_order %}
+            {% if severity in grouped_findings %}
+            <div class="severity-group">
+                <div class="severity-group__header severity-group__header--{{ severity }}">
+                    <span class="severity-dot severity-dot--{{ severity }}"></span>
+                    {{ severity | upper }}
+                    <span class="severity-count">{{ grouped_findings[severity] | length }} issue{{ 's' if grouped_findings[severity] | length != 1 else '' }}</span>
+                </div>
+
+                {% for finding in grouped_findings[severity] %}
+                <div class="finding-card glass-card">
+                    <div class="finding-card__header">
+                        <span class="severity-badge severity-badge--{{ finding.severity }}">
+                            {{ finding.severity }}
+                        </span>
+                        <span class="finding-card__title">{{ finding.title }}</span>
+                        <span class="finding-card__category">{{ finding.category }}</span>
+                        <span class="finding-card__chevron">▶</span>
+                    </div>
+                    <div class="finding-card__body">
+                        {% if finding.description %}
+                        <p class="finding-card__description">{{ finding.description }}</p>
+                        {% endif %}
+
+                        {% if finding.line_start %}
+                        <p class="finding-card__lines">
+                            📍 Lines {{ finding.line_start }}{% if finding.line_end and finding.line_end != finding.line_start %}-{{ finding.line_end }}{% endif %}
+                            {% if finding.get('source_file') %} · {{ finding.source_file }}{% endif %}
+                        </p>
+                        {% endif %}
+
+                        {% if finding.suggestion %}
+                        <div class="finding-card__suggestion">
+                            <div class="finding-card__suggestion-label">💡 Suggestion</div>
+                            <p class="finding-card__suggestion-text">{{ finding.suggestion }}</p>
+                        </div>
+                        {% endif %}
+
+                        {% if finding.code_snippet %}
+                        <div class="code-block">
+                            <code>{{ finding.code_snippet }}</code>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+
+        <!-- Actions -->
+        <div style="text-align: center; margin-top: 3rem;">
+            <a href="/audit" class="btn btn--primary">
+                ⚡ Run Another Audit
+            </a>
+        </div>
+    </section>
+</div>
+{% endblock %}

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Code Intelligence Platform{% endblock %}</title>
+    <meta name="description" content="{% block meta_desc %}AI-powered code auditing and analytics platform. Get instant security, performance, and quality insights for your code.{% endblock %}">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="/static/css/style.css">
+
+    {% block head_extra %}{% endblock %}
+</head>
+<body>
+    <!-- Background Effects -->
+    <canvas id="particle-canvas"></canvas>
+    <div class="bg-grid"></div>
+    <div class="bg-glow bg-glow--purple"></div>
+    <div class="bg-glow bg-glow--indigo"></div>
+
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="navbar__inner">
+            <a href="/" class="navbar__logo">
+                <div class="navbar__logo-icon">⚡</div>
+                <span>CodeIntel</span>
+            </a>
+            <ul class="navbar__links">
+                <li><a href="/" class="navbar__link {% if active_page == 'home' %}navbar__link--active{% endif %}">Home</a></li>
+                <li><a href="/analytics" class="navbar__link {% if active_page == 'analytics' %}navbar__link--active{% endif %}">Analytics</a></li>
+                <li><a href="/audit/standards" class="navbar__link {% if active_page == 'standards' %}navbar__link--active{% endif %}">📋 Standards Audit</a></li>
+                <li><a href="/audit" class="navbar__link navbar__link--cta">⚡ Start Audit</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-spinner-lg"></div>
+        <p id="loading-text" class="loading-text">Analyzing your code...</p>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p class="footer__text">Built with FastAPI & Google Gemini — Code Intelligence Platform</p>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="/static/js/animations.js"></script>
+    <script src="/static/js/audit.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
