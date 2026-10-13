@@ -87,21 +87,110 @@ def run():
     """Main entry point — dispatches to CLI scan or API server."""
     parser = argparse.ArgumentParser(
         prog="ast-sentinel",
-        description="AST-Sentinel: Static Source Code Security Audit Engine"
+        description=(
+            "AST-Sentinel — Deterministic Static Source Code Security & Vulnerability Audit Engine\n\n"
+            "Parses Python source files into AST nodes and traverses them with a modular rule\n"
+            "registry to detect security vulnerabilities, compute risk scores, and produce\n"
+            "structured JSON or HTML reports."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  ast-sentinel scan myfile.py\n"
+            "  ast-sentinel scan ./src/ --verbose\n"
+            "  ast-sentinel scan ./src/ --json report.json --html report.html\n"
+            "  ast-sentinel serve --host 0.0.0.0 --port 8080\n"
+            "\n"
+            "Security rules applied:\n"
+            "  SEC-001  Hardcoded Secrets     (CRITICAL/HIGH)\n"
+            "  SEC-002  Code Injection        (CRITICAL)      eval/exec/shell=True\n"
+            "  SEC-003  SQL Injection         (CRITICAL)      dynamic query construction\n"
+            "  SEC-004  Insecure Cryptography (HIGH)          MD5, SHA-1, weak PRNGs\n"
+            "  SEC-005  Unsafe Deserialization(HIGH)          pickle.loads, yaml.load\n"
+            "  SEC-006  Exception Handling    (MEDIUM)        bare except, swallowed errors\n"
+            "\n"
+            "For the AI-powered web interface (Code Intelligence Platform), visit:\n"
+            "  https://github.com/WooliestAnt8617/AST-Sentinel-hub\n"
+        ),
     )
-    subparsers = parser.add_subparsers(dest="command")
+    subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
 
     # --- 'scan' subcommand ---
-    scan_parser = subparsers.add_parser("scan", help="Scan a file or directory")
-    scan_parser.add_argument("target", help="Path to a .py file or directory to scan")
-    scan_parser.add_argument("--json", help="Output JSON report to this path", default=None)
-    scan_parser.add_argument("--html", help="Output HTML report to this path", default=None)
-    scan_parser.add_argument("-v", "--verbose", action="store_true", help="Show detailed remediation info")
+    scan_parser = subparsers.add_parser(
+        "scan",
+        help="Scan a Python file or directory for security vulnerabilities",
+        description=(
+            "Recursively scan a Python source file or directory.\n\n"
+            "The scanner parses each .py file into an Abstract Syntax Tree (AST),\n"
+            "applies all registered security rules, computes a composite risk score,\n"
+            "and prints a colour-coded report to the terminal.\n\n"
+            "Optionally export the findings as a JSON data file or a self-contained\n"
+            "HTML report."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  ast-sentinel scan app.py\n"
+            "  ast-sentinel scan ./src/ -v\n"
+            "  ast-sentinel scan ./project/ --json findings.json\n"
+            "  ast-sentinel scan ./project/ --json out.json --html out.html -v\n"
+        ),
+    )
+    scan_parser.add_argument(
+        "target",
+        help="Path to a .py file or a directory to scan (scanned recursively)",
+    )
+    scan_parser.add_argument(
+        "--json",
+        metavar="FILE",
+        help="Write findings to FILE as structured JSON (e.g. report.json)",
+        default=None,
+    )
+    scan_parser.add_argument(
+        "--html",
+        metavar="FILE",
+        help="Write a self-contained HTML report to FILE (e.g. report.html)",
+        default=None,
+    )
+    scan_parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Show full remediation advice and code context for each finding",
+    )
 
     # --- 'serve' subcommand ---
-    serve_parser = subparsers.add_parser("serve", help="Start the FastAPI API server")
-    serve_parser.add_argument("--host", default="127.0.0.1")
-    serve_parser.add_argument("--port", type=int, default=8000)
+    serve_parser = subparsers.add_parser(
+        "serve",
+        help="Start the local AST-Sentinel FastAPI REST API server",
+        description=(
+            "Launch the built-in FastAPI server that exposes the scan engine\n"
+            "over HTTP. Once running, visit /docs for the interactive Swagger UI.\n\n"
+            "Useful for integrating AST-Sentinel into CI pipelines or other tooling\n"
+            "via the REST API rather than the CLI."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  ast-sentinel serve\n"
+            "  ast-sentinel serve --port 9000\n"
+            "  ast-sentinel serve --host 0.0.0.0 --port 8080\n"
+            "\n"
+            "Then open: http://localhost:8000/docs\n"
+        ),
+    )
+    serve_parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        metavar="HOST",
+        help="Host/IP to bind the server to (default: 127.0.0.1)",
+    )
+    serve_parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        metavar="PORT",
+        help="TCP port to listen on (default: 8000)",
+    )
 
     args = parser.parse_args()
 
