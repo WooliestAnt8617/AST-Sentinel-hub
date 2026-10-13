@@ -162,8 +162,11 @@ async def audit_code(code: str, filename: str | None = None, language_hint: str 
             ),
         )
 
-        raw_text = response.text.strip()
-        
+        response_text = response.text or ""
+        raw_text = response_text.strip()
+        if not raw_text:
+            return _fallback_result(code, filename, language_hint, "Gemini returned an empty response")
+
         # Strip markdown code fences if present
         if raw_text.startswith("```"):
             # Remove opening fence (```json or ```)
@@ -171,9 +174,9 @@ async def audit_code(code: str, filename: str | None = None, language_hint: str 
             # Remove closing fence
             raw_text = re.sub(r'\n?```$', '', raw_text)
             raw_text = raw_text.strip()
-        
+
         result = json.loads(raw_text)
-        result["raw_text"] = response.text  # Keep original for debugging
+        result["raw_text"] = response_text  # Keep original for debugging
         return _validate_and_normalize(result)
 
     except json.JSONDecodeError as e:
@@ -239,7 +242,10 @@ async def audit_code_with_requirements(
             ),
         )
 
-        raw_text = response.text.strip()
+        response_text = response.text or ""
+        raw_text = response_text.strip()
+        if not raw_text:
+            return _fallback_result_with_requirements(code, filename, language_hint, "Gemini returned an empty response")
 
         # Strip markdown code fences if present
         if raw_text.startswith("```"):
@@ -248,7 +254,7 @@ async def audit_code_with_requirements(
             raw_text = raw_text.strip()
 
         result = json.loads(raw_text)
-        result["raw_text"] = response.text
+        result["raw_text"] = response_text
         return _validate_and_normalize_with_requirements(result)
 
     except json.JSONDecodeError as e:
