@@ -1,6 +1,7 @@
 """
-Code Intelligence Platform — FastAPI application entry point.
-Provides code auditing via Google Gemini and aggregate analytics.
+AST-Sentinel: Code Auditor — AI-powered code auditing & analytics web platform.
+Provides deep code analysis via Google Gemini and aggregate security analytics.
+Part of the AST-Sentinel security auditing ecosystem.
 """
 
 import json
@@ -43,8 +44,8 @@ async def lifespan(app_: FastAPI):
 
 
 app = FastAPI(
-    title="Code Intelligence Platform",
-    description="AI-powered code auditing and analytics",
+    title="AST-Sentinel: Code Auditor",
+    description="AI-powered code auditing and analytics — Web interface for AST-Sentinel",
     version="1.0.0",
     lifespan=lifespan,
 )

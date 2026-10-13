@@ -1,160 +1,220 @@
 # AST-Sentinel Hub
 
-> **Two ways to audit your code — pick the one that fits your workflow.**
+> **Static Source Code Security Audit Engine & AI-Powered Web Auditor**
+
+AST-Sentinel is a dual-interface security analysis platform for Python and multi-language projects. It provides two complementary ways to audit your code:
 
 ```
-  +-------------------------------+   +----------------------------------+
-  |      CLI Scanner              |   |   CodeIntel  Web App             |
-  |  ast-sentinel.exe / pip pkg   |   |  AI-powered · Gemini · Browser   |
-  |  Offline · CI/CD · Fast       |   |  Audit history · Analytics       |
-  +-------------------------------+   +----------------------------------+
+  +-------------------------------------+   +------------------------------------+
+  |      AST-Sentinel CLI               |   |   AST-Sentinel: Code Auditor       |
+  |  Standalone .exe or pip package     |   |   AI-powered web platform          |
+  |  Deterministic · AST rules · CI/CD  |   |   Deep analysis · History · Web UI |
+  +-------------------------------------+   +------------------------------------+
 ```
 
 ---
 
 ## What Is AST-Sentinel?
 
-**AST-Sentinel** is a deterministic static application security testing (SAST) engine for Python. It parses source files into Abstract Syntax Trees (AST), walks every node through a modular **Visitor Pattern** rule registry, and produces structured security findings with composite risk scores.
+**AST-Sentinel** is a static application security testing (SAST) and code intelligence ecosystem consisting of two integrated parts:
 
-**CodeIntel** is the companion AI-powered web platform. It uses **Google Gemini** as a senior code reviewer to go beyond rule-based detection — covering security, performance, maintainability, accessibility, and standards compliance.
+1. **AST-Sentinel CLI (Core SAST Engine)**: A deterministic, rule-based static analysis engine for Python. It parses source code into Abstract Syntax Trees (`ast`), applies a modular Visitor-Pattern security registry, detects vulnerabilities (secrets, injections, unsafe deserialization, insecure crypto, etc.), and outputs formatted terminal tables or JSON/HTML reports. It operates entirely offline with zero runtime dependencies.
+2. **AST-Sentinel Code Auditor (Web Interface)**: The companion web application located in `code-auditor/`. It provides a modern browser UI powered by FastAPI and Google Gemini. It handles multi-language auditing, ZIP uploads, GitHub links, standards compliance audits (OWASP, PEP 8, SOLID), user authentication, audit history, analytics dashboards, and direct downloads of the standalone CLI executable.
 
 ---
 
-## Access Options
+## Two Ways to Audit Your Code
 
-| | CLI (AST-Sentinel) | Web App (CodeIntel) |
+| Feature | 💻 AST-Sentinel CLI | 🌐 Code Auditor (Web) |
 |---|---|---|
-| **Engine** | Deterministic AST rules | Google Gemini AI |
-| **Works offline** | Yes | No |
-| **CI/CD integration** | Yes | No |
-| **Audit history & analytics** | No | Yes |
-| **Standards & compliance audit** | No | Yes (OWASP, PEP 8, SOLID) |
-| **JSON / HTML report export** | Yes | Yes |
-| **ZIP / multi-file scanning** | Yes (directory) | Yes (zip upload) |
-| **No install required** | No | Yes (browser) |
+| **Primary Interface** | Command prompt / Terminal / CI/CD | Browser (FastAPI + Modern Web UI) |
+| **Analysis Engine** | Deterministic Python AST rules | Google Gemini AI + AST heuristics |
+| **Network Required** | **No** (100% offline) | Yes (Gemini API & local server) |
+| **Language Support** | Python | Python, JS, TS, Go, Rust, Java, C++, PHP, etc. |
+| **Zero Installation** | Standalone `ast-sentinel.exe` (run directly) | Browser UI (open `http://localhost:8000`) |
+| **Export Formats** | Terminal colors, JSON, standalone HTML | Browser view, JSON export, HTML |
+| **Multi-file / Project** | Recursive directory scanning | ZIP archive upload or multi-file tree |
+| **Standards Checks** | Rule-based (SEC-001 through SEC-006) | Framework checks (OWASP Top 10, PEP 8, SOLID) |
+| **Audit History & Analytics** | Standalone report files | Persistent SQLite DB with user dashboard |
 
 ---
 
-## CLI — Quick Start
+## 💻 1. AST-Sentinel CLI — Usage & Help Menu
 
-### Option A: Download the pre-built Windows executable
+The CLI can be run either as a standalone Windows binary (`ast-sentinel.exe`) or installed from source via Python.
 
-Download `ast-sentinel.exe` from the [CodeIntel download page](/download) and run it anywhere — no Python, no pip, no installer.
+### Getting the CLI
 
+#### Option A: Download the Standalone Executable (Windows)
+Download `ast-sentinel.exe` directly from the **Code Auditor** web interface at `http://localhost:8000/download`.  
+No Python installation or dependencies required. Simply open `cmd` or `powershell` and run:
 ```cmd
-:: Scan a single file
-ast-sentinel scan myfile.py
-
-:: Scan a whole project (verbose)
-ast-sentinel scan ./src/ --verbose
-
-:: Export JSON + HTML reports
-ast-sentinel scan ./src/ --json report.json --html report.html -v
-
-:: Start the local REST API server
-ast-sentinel serve --host 0.0.0.0 --port 8000
+ast-sentinel.exe --help
 ```
 
-### Option B: Install from source (any OS)
-
-**Requirements:** Python >= 3.10
-
+#### Option B: Install from Source (Cross-Platform)
+Requires Python >= 3.10:
 ```bash
 git clone https://github.com/WooliestAnt8617/AST-Sentinel-hub.git
 cd AST-Sentinel-hub
 pip install -e ".[dev]"
 ```
 
-### CLI Help
+---
+
+### CLI Help Menu & Command Reference
+
+AST-Sentinel features an interactive help menu and built-in usage documentation accessible directly from your terminal:
 
 ```
 ast-sentinel --help
-ast-sentinel scan --help
-ast-sentinel serve --help
+ast-sentinel help
+ast-sentinel help scan
+ast-sentinel help serve
+```
+
+#### Global Commands
+
+```
+usage: ast-sentinel [-h] COMMAND ...
+
+positional arguments:
+  COMMAND
+    scan          Scan a Python file or directory for security vulnerabilities
+    serve         Start the local AST-Sentinel FastAPI REST API server
+    help          Show detailed help and usage manual for commands
+
+options:
+  -h, --help      Show help message and exit
+```
+
+#### `scan` Command
+
+```
+usage: ast-sentinel scan [-h] [--json FILE] [--html FILE] [-v] target
+
+positional arguments:
+  target          Path to a .py file or directory to scan (scanned recursively)
+
+options:
+  -h, --help      Show help message and exit
+  --json FILE     Write findings to FILE as structured JSON (e.g. report.json)
+  --html FILE     Write a self-contained HTML report to FILE (e.g. report.html)
+  -v, --verbose   Show full remediation advice and source code snippets
+```
+
+#### `serve` Command
+
+```
+usage: ast-sentinel serve [-h] [--host HOST] [--port PORT]
+
+options:
+  --host HOST     Host/IP to bind the server to (default: 127.0.0.1)
+  --port PORT     TCP port to listen on (default: 8000)
 ```
 
 ---
 
-## Web App (CodeIntel) — Quick Start
+### CLI Examples
+
+```cmd
+:: 1. Scan a single Python file
+ast-sentinel scan myfile.py
+
+:: 2. Scan an entire directory recursively with verbose explanations
+ast-sentinel scan ./src/ -v
+
+:: 3. Export structured JSON findings for CI/CD pipelines
+ast-sentinel scan ./src/ --json findings.json
+
+:: 4. Export self-contained HTML security report
+ast-sentinel scan ./src/ --html security-report.html
+
+:: 5. Launch the local AST-Sentinel REST API server (Swagger UI at /docs)
+ast-sentinel serve --port 8080
+```
+
+---
+
+## 🌐 2. AST-Sentinel Code Auditor (Web App) — Quick Start
+
+The **Code Auditor** provides a rich web dashboard for interactive audits, project uploads, and team reporting.
 
 ```bash
 cd code-auditor
 pip install -r requirements.txt
-cp .env.example .env   # Add your Gemini API key
+cp .env.example .env   # Configure GEMINI_API_KEY
 python main.py
-# Open http://127.0.0.1:8000
 ```
+Open **`http://127.0.0.1:8000`** in your browser.
 
-### Web App Features
-
-| Feature | Details |
-|---|---|
-| **Code Paste Audit** | Paste any snippet for instant AI analysis |
-| **ZIP Upload** | Upload entire project archives for per-file + aggregate results |
-| **GitHub URL Audit** | Point at a raw GitHub file or gist |
-| **Standards Audit** | Audit against OWASP, PEP 8, SOLID, custom naming conventions |
-| **Analytics Dashboard** | Severity charts, score trends, language breakdown |
-| **Audit History** | All past audits stored per-user with full JSON export |
-| **Auth** | Email/password sign-up and login with session tokens |
+### Key Features of Code Auditor
+- **Instant Snippet Auditing**: Paste any code snippet across 15+ languages for automated review.
+- **ZIP Archive & Project Audits**: Upload a `.zip` archive of your codebase for whole-project analysis and file trees.
+- **GitHub URL Audits**: Point directly to raw GitHub files or gists.
+- **Standards & Compliance Checks**: Run targeted audits against OWASP Top 10, PEP 8, and SOLID design principles.
+- **Download Hub (`/download`)**: Built-in distribution page to download the standalone `ast-sentinel.exe` binary.
+- **Audit History & Accounts**: Secure session authentication, past audit records, and aggregate analytics.
 
 ---
 
-## Security Rules (CLI Engine)
+## Built-In Security Rules (CLI Engine)
 
-| Rule ID | Name | Severity | What It Detects |
-|---------|------|----------|-----------------|
-| SEC-001 | Hardcoded Secrets | CRITICAL / HIGH | Passwords, API keys, tokens assigned as string literals |
-| SEC-002 | Code Injection | CRITICAL | `eval()`, `exec()`, `subprocess` with `shell=True` |
-| SEC-003 | SQL Injection | CRITICAL | Dynamic SQL via f-strings, `%` formatting, `.format()` |
-| SEC-004 | Insecure Cryptography | HIGH | MD5, SHA-1, non-cryptographic PRNGs (`random`) |
-| SEC-005 | Unsafe Deserialization | HIGH | `pickle.loads()`, `yaml.load()` without SafeLoader |
-| SEC-006 | Exception Handling | MEDIUM | Bare `except:`, overly broad catches, empty except bodies |
+| Rule ID | Name | Severity | Description |
+|---|---|---|---|
+| **SEC-001** | Hardcoded Secrets | `CRITICAL` / `HIGH` | Detects passwords, API keys, tokens, and secrets hardcoded in strings. |
+| **SEC-002** | Code Injection | `CRITICAL` | Flags `eval()`, `exec()`, `input()`, and `subprocess` executions with `shell=True`. |
+| **SEC-003** | SQL Injection | `CRITICAL` | Detects dynamic SQL string construction via f-strings, `%`, or `.format()`. |
+| **SEC-004** | Insecure Cryptography | `HIGH` | Flags weak cryptographic algorithms (MD5, SHA-1, DES) and pseudo-random numbers (`random`). |
+| **SEC-005** | Unsafe Deserialization | `HIGH` | Flags `pickle.loads()`, `yaml.load()` without SafeLoader, and `marshal.loads()`. |
+| **SEC-006** | Exception Handling | `MEDIUM` | Identifies bare `except:`, broad `except Exception:` with `pass`, and suppressed errors. |
 
 ---
 
-## Architecture
+## Project Structure
 
 ```
-ast_sentinel/
-├── core/
-│   ├── parser.py         # AST parsing
-│   ├── registry.py       # Rule registry (Visitor Pattern)
-│   ├── scanner.py        # ScannerOrchestrator — file/dir traversal
-│   └── visitor.py        # Base AST visitor & node dispatch
-├── rules/                # One file per security rule
-├── metrics/
-│   └── risk_score.py     # Composite risk score computation
-├── reporting/
-│   ├── terminal.py       # Rich terminal output
-│   ├── json_report.py    # Structured JSON export
-│   └── html_report.py    # Self-contained HTML report
-├── api/
-│   └── routes.py         # FastAPI REST endpoints
-└── main.py               # CLI entry point & FastAPI app factory
-
-code-auditor/
-├── main.py               # FastAPI web app (CodeIntel)
-├── database.py           # Async SQLite
-├── services/
-│   ├── auditor.py        # Gemini AI audit logic
-│   ├── analytics.py      # Aggregate analytics queries
-│   ├── auth.py           # JWT session tokens
-│   └── file_handler.py   # ZIP extraction, language detection
-└── templates/            # Jinja2 HTML templates
-
-scripts/
-└── build_cli.py          # PyInstaller → dist/ast-sentinel.exe
+AST-Sentinel-hub/
+├── ast_sentinel/              # Deterministic CLI & Core SAST Engine
+│   ├── core/
+│   │   ├── parser.py          # AST parser
+│   │   ├── registry.py        # Rule registry & visitor dispatcher
+│   │   ├── scanner.py         # Scanner orchestrator & file walker
+│   │   └── visitor.py         # AST visitor base classes
+│   ├── rules/                 # Security rule implementations (SEC-001 to SEC-006)
+│   ├── metrics/               # Risk score calculation
+│   ├── reporting/             # Terminal, JSON, and HTML report generators
+│   ├── api/                   # REST API routes
+│   └── main.py                # CLI entry point, argparse help menu & server
+│
+├── code-auditor/              # AST-Sentinel Web Platform
+│   ├── main.py                # FastAPI web server & download endpoints
+│   ├── database.py            # SQLite database with aiosqlite
+│   ├── services/              # Gemini auditor, analytics, auth, file handler
+│   ├── templates/             # Jinja2 templates (dashboard, download, audit)
+│   ├── static/                # CSS, JavaScript, and compiled binary distribution
+│   │   └── bin/               # Pre-built ast-sentinel.exe
+│   └── requirements.txt       # Web platform dependencies
+│
+├── scripts/
+│   └── build_cli.py           # PyInstaller build automation script
+│
+├── tests/                     # Unit and integration test suite
+└── pyproject.toml             # Python package configuration
 ```
 
 ---
 
-## Building the CLI Executable
+## Building the CLI Standalone Binary
+
+You can compile the CLI into a single-file executable using the provided build script:
 
 ```bash
 pip install pyinstaller
 python scripts/build_cli.py
-# Output: dist/ast-sentinel.exe (also copied to code-auditor/static/bin/)
 ```
+
+The script builds `dist/ast-sentinel.exe` and copies it into `code-auditor/static/bin/ast-sentinel.exe` so the web app can serve it directly.
 
 ---
 
@@ -166,29 +226,6 @@ pytest tests/ -v
 
 ---
 
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| CLI engine | Python 3.10+, `ast` stdlib, `rich` |
-| REST API | FastAPI, uvicorn, pydantic |
-| Web app | FastAPI, Jinja2, vanilla CSS/JS |
-| AI analysis | Google Gemini API |
-| Database | SQLite via `aiosqlite` |
-| Packaging | PyInstaller (standalone .exe) |
-
----
-
-## Contributing
-
-1. Fork the repo and create a feature branch
-2. Add new rules in `ast_sentinel/rules/` — each is a self-contained visitor class
-3. Register the rule in `ast_sentinel/core/registry.py`
-4. Add tests in `tests/`
-5. Run `ruff check .` and `pytest tests/ -v` before opening a PR
-
----
-
 ## License
 
-MIT
+MIT License. See [LICENSE](LICENSE) for details.
