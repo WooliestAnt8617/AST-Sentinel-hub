@@ -44,7 +44,7 @@ def print_terminal_report(result: ScanResult, verbose: bool = False):
     console.print(summary_table)
 
     if result.summary.total_findings == 0:
-        console.print("\n[bold green]✓ No security findings detected.[/]\n")
+        console.print("\n[bold green][+] No security findings detected.[/]\n")
         return
 
     # Findings table
