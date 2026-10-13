@@ -84,33 +84,45 @@ def run_cli(args: argparse.Namespace):
 
 
 def run():
-    """Main entry point — dispatches to CLI scan or API server."""
+    """Main entry point - dispatches to CLI scan or API server."""
+    if sys.platform == "win32":
+        try:
+            if hasattr(sys.stdout, "reconfigure"):
+                sys.stdout.reconfigure(encoding="utf-8")
+            if hasattr(sys.stderr, "reconfigure"):
+                sys.stderr.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+
     parser = argparse.ArgumentParser(
         prog="ast-sentinel",
         description=(
-            "AST-Sentinel — Deterministic Static Source Code Security & Vulnerability Audit Engine\n\n"
-            "Parses Python source files into AST nodes and traverses them with a modular rule\n"
-            "registry to detect security vulnerabilities, compute risk scores, and produce\n"
-            "structured JSON or HTML reports."
+            "AST-Sentinel - Deterministic Static Source Code Security & Vulnerability Audit Engine\n\n"
+            "Parses Python source files into Abstract Syntax Trees (AST) and traverses them with\n"
+            "a modular rule registry to detect security vulnerabilities, compute risk scores,\n"
+            "and produce structured terminal, JSON, or HTML reports."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
-            "Examples:\n"
+            "Commands:\n"
+            "  ast-sentinel scan <target>    Scan a Python file or directory for vulnerabilities\n"
+            "  ast-sentinel serve            Start the local FastAPI REST API server\n"
+            "  ast-sentinel help [COMMAND]   Show detailed help for a specific command\n\n"
+            "Quick Examples:\n"
             "  ast-sentinel scan myfile.py\n"
             "  ast-sentinel scan ./src/ --verbose\n"
             "  ast-sentinel scan ./src/ --json report.json --html report.html\n"
-            "  ast-sentinel serve --host 0.0.0.0 --port 8080\n"
-            "\n"
-            "Security rules applied:\n"
+            "  ast-sentinel serve --host 0.0.0.0 --port 8080\n\n"
+            "Security Rules Applied:\n"
             "  SEC-001  Hardcoded Secrets     (CRITICAL/HIGH)\n"
             "  SEC-002  Code Injection        (CRITICAL)      eval/exec/shell=True\n"
             "  SEC-003  SQL Injection         (CRITICAL)      dynamic query construction\n"
             "  SEC-004  Insecure Cryptography (HIGH)          MD5, SHA-1, weak PRNGs\n"
             "  SEC-005  Unsafe Deserialization(HIGH)          pickle.loads, yaml.load\n"
-            "  SEC-006  Exception Handling    (MEDIUM)        bare except, swallowed errors\n"
-            "\n"
-            "For the AI-powered web interface (Code Intelligence Platform), visit:\n"
-            "  https://github.com/WooliestAnt8617/AST-Sentinel-hub\n"
+            "  SEC-006  Exception Handling    (MEDIUM)        bare except, swallowed errors\n\n"
+            "Companion Web Platform:\n"
+            "  AST-Sentinel Code Auditor provides an AI-powered web interface at:\n"
+            "  http://127.0.0.1:8000 (run via 'python code-auditor/main.py')\n"
         ),
     )
     subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
@@ -173,8 +185,7 @@ def run():
             "Examples:\n"
             "  ast-sentinel serve\n"
             "  ast-sentinel serve --port 9000\n"
-            "  ast-sentinel serve --host 0.0.0.0 --port 8080\n"
-            "\n"
+            "  ast-sentinel serve --host 0.0.0.0 --port 8080\n\n"
             "Then open: http://localhost:8000/docs\n"
         ),
     )
@@ -192,21 +203,32 @@ def run():
         help="TCP port to listen on (default: 8000)",
     )
 
-    args = parser.parse_args()
+    # --- 'help' subcommand ---
+    help_parser = subparsers.add_parser(
+        "help",
+        help="Show detailed help and usage manual for commands",
+        description="Display help manual for AST-Sentinel or a specific command.",
+    )
+    help_parser.add_argument(
+        "subcommand",
+        nargs="?",
+        choices=["scan", "serve"],
+        help="Optional command name to view detailed documentation for (scan, serve)",
+    )
 
-    if sys.platform == "win32":
-        try:
-            if hasattr(sys.stdout, "reconfigure"):
-                sys.stdout.reconfigure(encoding="utf-8")
-            if hasattr(sys.stderr, "reconfigure"):
-                sys.stderr.reconfigure(encoding="utf-8")
-        except Exception:
-            pass
+    args = parser.parse_args()
 
     if args.command == "scan":
         run_cli(args)
     elif args.command == "serve":
         uvicorn.run("ast_sentinel.main:app", host=args.host, port=args.port, reload=True)
+    elif args.command == "help":
+        if args.subcommand == "scan":
+            scan_parser.print_help()
+        elif args.subcommand == "serve":
+            serve_parser.print_help()
+        else:
+            parser.print_help()
     else:
         parser.print_help()
 
