@@ -42,6 +42,21 @@
             {% endif %}
         </div>
 
+        <!-- Two Access Methods -->
+        <div class="access-methods" style="margin-top: 2.5rem;">
+            <a href="/audit" class="access-card access-card--web">
+                <div class="access-card__icon">🌐</div>
+                <div class="access-card__label">Web App</div>
+                <div class="access-card__desc">AI-powered · In-browser · No install</div>
+            </a>
+            <div class="access-divider"><span>+</span></div>
+            <a href="/download" class="access-card access-card--cli">
+                <div class="access-card__icon">💻</div>
+                <div class="access-card__label">CLI Download</div>
+                <div class="access-card__desc">Offline · CI/CD · Standalone .exe</div>
+            </a>
+        </div>
+
         <div class="hero__stats">
             {% if current_user %}
             <div class="hero__stat" data-animate>
@@ -81,6 +96,15 @@
                 <p class="feature-card__desc">
                     Paste code snippets or upload ZIP archives for comprehensive AI-powered audits
                     covering security, performance, accessibility, and best practices.
+                </p>
+            </a>
+
+            <a href="/download" class="feature-card glass-card feature-card--cli" data-animate>
+                <div class="feature-card__icon">💻</div>
+                <h3 class="feature-card__title heading-md">CLI Scanner</h3>
+                <p class="feature-card__desc">
+                    Download the standalone <code class="inline-code">ast-sentinel.exe</code> — scan files and directories
+                    from your terminal, offline, with zero dependencies. Perfect for CI/CD pipelines.
                 </p>
             </a>
 

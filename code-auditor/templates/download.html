@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block title %}Download AST-Sentinel CLI — Standalone Security Scanner{% endblock %}
+{% block meta_desc %}Download the AST-Sentinel CLI — a standalone Windows executable for deterministic static code security auditing. Run it anywhere, no Python required.{% endblock %}
+
+{% set active_page = "download" %}
+
+{% block content %}
+<div class="container">
+
+    <!-- Hero Section -->
+    <section class="hero" style="padding-bottom: 3rem;">
+        <div class="hero__badge">
+            <span class="hero__badge-dot"></span>
+            <span>Standalone CLI · No Python Required</span>
+        </div>
+
+        <h1 class="hero__title heading-xl">
+            <span class="gradient-text">AST-Sentinel</span><br>
+            CLI Scanner
+        </h1>
+
+        <p class="hero__subtitle">
+            A deterministic static source code security audit engine — packaged as a
+            single Windows executable. Drop it anywhere and start scanning instantly.
+        </p>
+
+        <!-- Access Methods -->
+        <div class="access-methods">
+            <div class="access-card access-card--cli access-card--active">
+                <div class="access-card__icon">💻</div>
+                <div class="access-card__label">CLI (Offline)</div>
+                <div class="access-card__desc">Download &amp; run anywhere</div>
+            </div>
+            <div class="access-divider">
+                <span>or</span>
+            </div>
+            <a href="/audit" class="access-card access-card--web">
+                <div class="access-card__icon">🌐</div>
+                <div class="access-card__label">Web App</div>
+                <div class="access-card__desc">AI-powered, in your browser</div>
+            </a>
+        </div>
+    </section>
+
+    <!-- Download Card -->
+    <section class="page-section" style="padding-top: 0;">
+        <div class="download-hero glass-card glass-card--elevated" data-animate>
+            <div class="download-hero__left">
+                <div class="download-badge">
+                    <span class="download-badge__icon">🛡️</span>
+                    <div>
+                        <div class="download-badge__name">ast-sentinel.exe</div>
+                        <div class="download-badge__meta">
+                            Windows x64 · v0.1.0
+                            {% if exe_available %} · {{ exe_size_mb }} MB{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <ul class="download-features">
+                    <li><span class="check">✓</span> Zero dependencies — no Python, no pip</li>
+                    <li><span class="check">✓</span> Scans files &amp; entire directories</li>
+                    <li><span class="check">✓</span> JSON &amp; HTML report export</li>
+                    <li><span class="check">✓</span> 20+ security rules (SQLi, SSRF, XXE, secrets…)</li>
+                    <li><span class="check">✓</span> Works offline in air-gapped environments</li>
+                    <li><span class="check">✓</span> Risk scoring &amp; severity triage</li>
+                </ul>
+            </div>
+
+            <div class="download-hero__right">
+                {% if exe_available %}
+                <a href="/download/cli" class="btn btn--primary btn--xl download-btn" id="cli-download-btn">
+                    <span class="download-btn__icon">⬇</span>
+                    <span>
+                        <span class="download-btn__main">Download for Windows</span>
+                        <span class="download-btn__sub">ast-sentinel.exe · {{ exe_size_mb }} MB</span>
+                    </span>
+                </a>
+                {% else %}
+                <div class="btn btn--disabled btn--xl download-btn">
+                    <span>⏳ Build not yet available</span>
+                </div>
+                {% endif %}
+
+                <p class="download-note">
+                    🐧 Linux / macOS: clone the repo and run<br>
+                    <code class="inline-code">pip install -e . &amp;&amp; ast-sentinel scan ./</code>
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Usage Section -->
+    <section class="page-section">
+        <h2 class="heading-lg" style="text-align: center; margin-bottom: 0.5rem;" data-animate>
+            <span class="gradient-text">Quick Start</span>
+        </h2>
+        <p class="text-body" style="text-align: center; max-width: 540px; margin: 0 auto 2.5rem;" data-animate>
+            Drop the exe on your PATH or run it directly. No installer needed.
+        </p>
+
+        <div class="usage-grid">
+            <div class="usage-step glass-card" data-animate>
+                <div class="usage-step__num">01</div>
+                <h3 class="usage-step__title">Download &amp; Place</h3>
+                <p class="usage-step__desc">Download the exe and move it to a folder on your <code class="inline-code">PATH</code> (e.g. <code class="inline-code">C:\tools\</code>), or just keep it in your project folder.</p>
+            </div>
+            <div class="usage-step glass-card" data-animate>
+                <div class="usage-step__num">02</div>
+                <h3 class="usage-step__title">Scan a File</h3>
+                <div class="code-block">
+                    <div class="code-block__header">
+                        <span class="code-block__lang">cmd / powershell</span>
+                        <button class="code-copy-btn" onclick="copyCode(this)" data-code="ast-sentinel scan myfile.py">Copy</button>
+                    </div>
+                    <pre class="code-block__body"><code><span class="cmd-prompt">&#10095;</span> ast-sentinel scan myfile.py</code></pre>
+                </div>
+            </div>
+            <div class="usage-step glass-card" data-animate>
+                <div class="usage-step__num">03</div>
+                <h3 class="usage-step__title">Scan a Directory</h3>
+                <div class="code-block">
+                    <div class="code-block__header">
+                        <span class="code-block__lang">cmd / powershell</span>
+                        <button class="code-copy-btn" onclick="copyCode(this)" data-code="ast-sentinel scan ./my-project/ -v">Copy</button>
+                    </div>
+                    <pre class="code-block__body"><code><span class="cmd-prompt">&#10095;</span> ast-sentinel scan ./my-project/ -v</code></pre>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- All Commands Section -->
+    <section class="page-section">
+        <h2 class="heading-lg" style="text-align: center; margin-bottom: 2rem;" data-animate>
+            <span class="gradient-text">All Commands</span>
+        </h2>
+
+        <div class="commands-card glass-card" data-animate>
+            <div class="code-block code-block--full">
+                <div class="code-block__header">
+                    <span class="code-block__lang">ast-sentinel --help</span>
+                    <button class="code-copy-btn" onclick="copyCode(this)" data-code="ast-sentinel scan path/to/file.py&#10;ast-sentinel scan ./src/ --verbose&#10;ast-sentinel scan ./src/ --json report.json&#10;ast-sentinel scan ./src/ --html report.html&#10;ast-sentinel scan ./src/ --json out.json --html out.html&#10;ast-sentinel serve --port 8080">Copy all</button>
+                </div>
+                <pre class="code-block__body"><code><span class="cmd-prompt">&#10095;</span> <span class="cmd-kw">ast-sentinel</span> scan path/to/file.py
+
+<span class="cmd-prompt">&#10095;</span> <span class="cmd-kw">ast-sentinel</span> scan ./src/ --verbose
+
+<span class="cmd-prompt">&#10095;</span> <span class="cmd-kw">ast-sentinel</span> scan ./src/ --json report.json
+
+<span class="cmd-prompt">&#10095;</span> <span class="cmd-kw">ast-sentinel</span> scan ./src/ --html report.html
+
+<span class="cmd-prompt">&#10095;</span> <span class="cmd-kw">ast-sentinel</span> scan ./src/ --json out.json --html out.html
+
+<span class="cmd-prompt">&#10095;</span> <span class="cmd-kw">ast-sentinel</span> serve --port 8080</code></pre>
+            </div>
+        </div>
+    </section>
+
+    <!-- Comparison Section -->
+    <section class="page-section">
+        <h2 class="heading-lg" style="text-align: center; margin-bottom: 2rem;" data-animate>
+            <span class="gradient-text">CLI vs Web App</span>
+        </h2>
+
+        <div class="compare-table-wrapper glass-card" data-animate>
+            <table class="compare-table">
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th class="compare-cli">💻 CLI</th>
+                        <th class="compare-web">🌐 Web App (CodeIntel)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Works offline</td>
+                        <td class="yes">✓</td>
+                        <td class="no">✗</td>
+                    </tr>
+                    <tr>
+                        <td>Deterministic AST rules</td>
+                        <td class="yes">✓</td>
+                        <td class="no">✗</td>
+                    </tr>
+                    <tr>
+                        <td>AI (Gemini) analysis</td>
+                        <td class="no">✗</td>
+                        <td class="yes">✓</td>
+                    </tr>
+                    <tr>
+                        <td>Audit history &amp; analytics</td>
+                        <td class="no">✗</td>
+                        <td class="yes">✓</td>
+                    </tr>
+                    <tr>
+                        <td>JSON / HTML report export</td>
+                        <td class="yes">✓</td>
+                        <td class="yes">✓</td>
+                    </tr>
+                    <tr>
+                        <td>CI/CD pipeline integration</td>
+                        <td class="yes">✓</td>
+                        <td class="no">✗</td>
+                    </tr>
+                    <tr>
+                        <td>Standards &amp; compliance audit</td>
+                        <td class="no">✗</td>
+                        <td class="yes">✓</td>
+                    </tr>
+                    <tr>
+                        <td>ZIP archive scanning</td>
+                        <td class="yes">✓ (directory)</td>
+                        <td class="yes">✓ (zip upload)</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="page-section" style="text-align: center;" data-animate>
+        <div class="glass-card glass-card--elevated" style="padding: 3rem 2rem; max-width: 700px; margin: 0 auto;">
+            <h2 class="heading-lg" style="margin-bottom: 0.75rem;">
+                Prefer the <span class="gradient-text">Web Experience</span>?
+            </h2>
+            <p class="text-body" style="margin-bottom: 2rem;">
+                Use the CodeIntel web app for AI-powered auditing with Gemini, audit history, analytics dashboards, and standards compliance — no download required.
+            </p>
+            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                <a href="/signup" class="btn btn--primary btn--lg">🚀 Try Web App Free</a>
+                {% if exe_available %}
+                <a href="/download/cli" class="btn btn--secondary btn--lg">⬇ Download CLI</a>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copyCode(btn) {
+    const code = btn.getAttribute('data-code');
+    navigator.clipboard.writeText(code).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = '✓ Copied!';
+        btn.style.color = '#22c55e';
+        setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 2000);
+    });
+}
+</script>
+{% endblock %}

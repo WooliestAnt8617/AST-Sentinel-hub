@@ -31,6 +31,7 @@
             </a>
             <ul class="navbar__links">
                 <li><a href="/" class="navbar__link {% if active_page == 'home' %}navbar__link--active{% endif %}">Home</a></li>
+                <li><a href="/download" class="navbar__link {% if active_page == 'download' %}navbar__link--active{% endif %}">⬇ CLI</a></li>
                 {% if current_user %}
                 <li><a href="/analytics" class="navbar__link {% if active_page == 'analytics' %}navbar__link--active{% endif %}">Analytics</a></li>
                 <li><a href="/audit/standards" class="navbar__link {% if active_page == 'standards' %}navbar__link--active{% endif %}">📋 Standards Audit</a></li>

@@ -18,7 +18,7 @@ if str(BASE_DIR) not in sys.path:
 
 import httpx
 from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from dotenv import load_dotenv
@@ -69,6 +69,7 @@ async def require_auth_middleware(request: Request, call_next):
         or path.startswith("/login")
         or path.startswith("/signup")
         or path.startswith("/static")
+        or path.startswith("/download")
         or path == "/favicon.ico"
     ):
         return await call_next(request)
@@ -170,6 +171,37 @@ async def logout():
     response = RedirectResponse(url="/login", status_code=303)
     response.delete_cookie(SESSION_COOKIE)
     return response
+
+
+@app.get("/download", response_class=HTMLResponse)
+async def download_page(request: Request):
+    """CLI download page."""
+    user = await get_current_user(request)
+    exe_path = BASE_DIR / "static" / "bin" / "ast-sentinel.exe"
+    exe_size_mb = round(exe_path.stat().st_size / (1024 * 1024), 1) if exe_path.exists() else 0
+    return templates.TemplateResponse(
+        "download.html",
+        {
+            "request": request,
+            "current_user": user,
+            "active_page": "download",
+            "exe_size_mb": exe_size_mb,
+            "exe_available": exe_path.exists(),
+        },
+    )
+
+
+@app.get("/download/cli")
+async def download_cli():
+    """Serve the ast-sentinel CLI executable for download."""
+    exe_path = BASE_DIR / "static" / "bin" / "ast-sentinel.exe"
+    if not exe_path.exists():
+        raise HTTPException(status_code=404, detail="CLI executable not yet built. Run scripts/build_cli.py first.")
+    return FileResponse(
+        path=str(exe_path),
+        filename="ast-sentinel.exe",
+        media_type="application/octet-stream",
+    )
 
 
 @app.get("/", response_class=HTMLResponse)

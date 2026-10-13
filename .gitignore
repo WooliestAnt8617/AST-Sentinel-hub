@@ -12,5 +12,10 @@ dist/
 build/
 *.egg-info/
 *.sqlite3
+*.db
 ast_sentinel.db
 .ruff_cache/
+*.spec
+code-auditor/static/bin/
+report.html
+report.json
