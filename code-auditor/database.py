@@ -5,14 +5,25 @@ Uses aiosqlite for async database access.
 
 import aiosqlite
 import os
+import hashlib
+import secrets
 from pathlib import Path
 
 DB_DIR = Path(__file__).parent / "data"
 DB_PATH = DB_DIR / "auditor.db"
 
 SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS audits (
     id TEXT PRIMARY KEY,
+    user_id TEXT REFERENCES users(id),
     created_at TEXT NOT NULL,
     language TEXT NOT NULL,
     filename TEXT,
@@ -61,6 +72,15 @@ CREATE INDEX IF NOT EXISTS idx_audits_language ON audits(language);
 MIGRATIONS = [
     "ALTER TABLE audits ADD COLUMN score_standards INTEGER",
     "ALTER TABLE audits ADD COLUMN audit_requirements TEXT",
+    "ALTER TABLE audits ADD COLUMN user_id TEXT REFERENCES users(id)",
+    """CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        username TEXT NOT NULL UNIQUE,
+        email TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_audits_user_id ON audits(user_id)",
 ]
 
 
@@ -95,13 +115,14 @@ async def save_audit(db: aiosqlite.Connection, audit_data: dict):
     """Save a complete audit result (audit + findings + topics) to the database."""
     await db.execute(
         """INSERT INTO audits 
-           (id, created_at, language, filename, source_type, code_length,
+           (id, user_id, created_at, language, filename, source_type, code_length,
             score_security, score_accessibility, score_performance,
             score_maintainability, score_overall, score_standards,
             complexity_level, summary, audit_requirements, raw_response)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             audit_data["id"],
+            audit_data.get("user_id"),
             audit_data["created_at"],
             audit_data["language"],
             audit_data.get("filename"),
@@ -181,11 +202,75 @@ async def get_audit(db: aiosqlite.Connection, audit_id: str) -> dict | None:
     return audit
 
 
-async def get_all_audits_summary(db: aiosqlite.Connection) -> list[dict]:
-    """Get a summary list of all audits (for listing / navigation)."""
-    cursor = await db.execute(
-        "SELECT id, created_at, language, filename, source_type, score_overall, summary "
-        "FROM audits ORDER BY created_at DESC LIMIT 100"
-    )
+async def get_all_audits_summary(db: aiosqlite.Connection, user_id: str | None = None) -> list[dict]:
+    """Get a summary list of audits. If user_id is given, only that user's audits."""
+    if user_id:
+        cursor = await db.execute(
+            "SELECT id, created_at, language, filename, source_type, score_overall, summary "
+            "FROM audits WHERE user_id = ? ORDER BY created_at DESC LIMIT 100",
+            (user_id,)
+        )
+    else:
+        cursor = await db.execute(
+            "SELECT id, created_at, language, filename, source_type, score_overall, summary "
+            "FROM audits ORDER BY created_at DESC LIMIT 100"
+        )
     rows = await cursor.fetchall()
     return [dict(r) for r in rows]
+
+
+# ── Auth Helpers ────────────────────────────────────────────────────────────
+
+def _hash_password(password: str) -> str:
+    """Hash a password using bcrypt."""
+    import bcrypt
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
+def _verify_password(password: str, hashed: str) -> bool:
+    """Verify a password against a bcrypt hash."""
+    import bcrypt
+    return bcrypt.checkpw(password.encode(), hashed.encode())
+
+
+async def create_user(db: aiosqlite.Connection, username: str, email: str, password: str) -> dict:
+    """Create a new user. Raises ValueError on duplicate username/email."""
+    from datetime import datetime, timezone
+    import uuid
+    user_id = str(uuid.uuid4())
+    password_hash = _hash_password(password)
+    created_at = datetime.now(timezone.utc).isoformat()
+    try:
+        await db.execute(
+            "INSERT INTO users (id, username, email, password_hash, created_at) VALUES (?, ?, ?, ?, ?)",
+            (user_id, username.strip().lower(), email.strip().lower(), password_hash, created_at),
+        )
+        await db.commit()
+    except aiosqlite.IntegrityError as e:
+        if "username" in str(e):
+            raise ValueError("Username already taken.")
+        raise ValueError("Email already registered.")
+    return {"id": user_id, "username": username.strip().lower(), "email": email.strip().lower(), "created_at": created_at}
+
+
+async def get_user_by_username(db: aiosqlite.Connection, username: str) -> dict | None:
+    """Fetch a user row by username."""
+    cursor = await db.execute(
+        "SELECT * FROM users WHERE username = ?", (username.strip().lower(),)
+    )
+    row = await cursor.fetchone()
+    return dict(row) if row else None
+
+
+async def get_user_by_id(db: aiosqlite.Connection, user_id: str) -> dict | None:
+    """Fetch a user row by ID."""
+    cursor = await db.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    row = await cursor.fetchone()
+    return dict(row) if row else None
+
+
+async def get_analytics_for_user(db: aiosqlite.Connection, user_id: str | None = None):
+    """Return a WHERE clause fragment and params tuple scoped to user_id."""
+    if user_id:
+        return "WHERE user_id = ?", (user_id,), "AND user_id = ?", (user_id,)
+    return "", (), "", ()

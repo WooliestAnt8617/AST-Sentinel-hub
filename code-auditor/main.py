@@ -6,8 +6,15 @@ Provides code auditing via Google Gemini and aggregate analytics.
 import json
 import uuid
 import re
+import sys
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+
+# Ensure code-auditor directory is in sys.path for direct script/submodule execution
+BASE_DIR = Path(__file__).resolve().parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
 import httpx
 from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
@@ -17,19 +24,29 @@ from fastapi.templating import Jinja2Templates
 from dotenv import load_dotenv
 
 # Load environment variables
-load_dotenv()
+load_dotenv(BASE_DIR / ".env", override=True)
+load_dotenv(override=True)
 
-from database import init_db, get_db, save_audit, get_audit
+from database import init_db, get_db, save_audit, get_audit, create_user, get_user_by_username, get_user_by_id, _verify_password
 from services.auditor import audit_code, audit_code_with_requirements
 from services.analytics import get_full_analytics
 from services.file_handler import detect_language, extract_zip, build_file_tree
+from services.auth import create_session_token, decode_session_token, SESSION_COOKIE
 
 # ── App Setup ──────────────────────────────────────────────────────────────────
+
+@asynccontextmanager
+async def lifespan(app_: FastAPI):
+    """Application lifespan: initialize DB on startup."""
+    await init_db()
+    yield
+
 
 app = FastAPI(
     title="Code Intelligence Platform",
     description="AI-powered code auditing and analytics",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 BASE_DIR = Path(__file__).parent
@@ -37,93 +54,171 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
-@app.on_event("startup")
-async def startup():
-    """Initialize the database on application startup."""
-    await init_db()
+# ── Auth Enforcement Middleware ───────────────────────────────────────────
+
+@app.middleware("http")
+async def require_auth_middleware(request: Request, call_next):
+    """
+    Ensure non-signed in users can ONLY access the home page, login, signup, and static assets.
+    All other pages redirect to /login; API routes return 401 Unauthorized.
+    """
+    path = request.url.path
+    # Publicly accessible routes
+    if (
+        path == "/"
+        or path.startswith("/login")
+        or path.startswith("/signup")
+        or path.startswith("/static")
+        or path == "/favicon.ico"
+    ):
+        return await call_next(request)
+
+    # Check session token
+    token = request.cookies.get(SESSION_COOKIE)
+    user_id = decode_session_token(token) if token else None
+    if not user_id:
+        if path.startswith("/api/"):
+            return JSONResponse(status_code=401, content={"error": "Authentication required"})
+        return RedirectResponse(url="/login", status_code=303)
+
+    return await call_next(request)
 
 
-# ── Pages ──────────────────────────────────────────────────────────────────────
+
+# ── Auth Helpers ────────────────────────────────────────────────────────────
+
+async def get_current_user(request: Request) -> dict | None:
+    """Read session cookie and return the user dict, or None if not logged in."""
+    token = request.cookies.get(SESSION_COOKIE)
+    if not token:
+        return None
+    user_id = decode_session_token(token)
+    if not user_id:
+        return None
+    db = await get_db()
+    try:
+        return await get_user_by_id(db, user_id)
+    finally:
+        await db.close()
+
+
+async def ctx(request: Request, extra: dict | None = None) -> dict:
+    """Build a base template context with current_user injected."""
+    user = await get_current_user(request)
+    base = {"request": request, "current_user": user}
+    if extra:
+        base.update(extra)
+    return base
+
+
+# ── Pages ─────────────────────────────────────────────────────────────────
+
+# ── Auth Routes ───────────────────────────────────────────────────────────
+
+@app.get("/signup", response_class=HTMLResponse)
+async def signup_page(request: Request):
+    return templates.TemplateResponse("signup.html", await ctx(request))
+
+
+@app.post("/signup", response_class=HTMLResponse)
+async def signup_post(request: Request, username: str = Form(...), email: str = Form(...),
+                      password: str = Form(...), confirm: str = Form(...)):
+    error = None
+    if len(username.strip()) < 3:
+        error = "Username must be at least 3 characters."
+    elif len(password) < 8:
+        error = "Password must be at least 8 characters."
+    elif password != confirm:
+        error = "Passwords do not match."
+    else:
+        db = await get_db()
+        try:
+            user = await create_user(db, username, email, password)
+        except ValueError as e:
+            error = str(e)
+        finally:
+            await db.close()
+        if not error:
+            response = RedirectResponse(url="/login?signup=1", status_code=303)
+            return response
+    return templates.TemplateResponse("signup.html", await ctx(request, {"error": error, "username": username, "email": email}))
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request, signup: str = ""):
+    extra = {"success": "Account created! Please sign in."} if signup == "1" else {}
+    return templates.TemplateResponse("login.html", await ctx(request, extra))
+
+
+@app.post("/login", response_class=HTMLResponse)
+async def login_post(request: Request, username: str = Form(...), password: str = Form(...)):
+    db = await get_db()
+    try:
+        user = await get_user_by_username(db, username)
+    finally:
+        await db.close()
+    if not user or not _verify_password(password, user["password_hash"]):
+        return templates.TemplateResponse("login.html", await ctx(request, {"error": "Invalid username or password.", "username": username}))
+    token = create_session_token(user["id"])
+    response = RedirectResponse(url="/", status_code=303)
+    response.set_cookie(SESSION_COOKIE, token, max_age=60 * 60 * 24 * 30, httponly=True, samesite="lax")
+    return response
+
+
+@app.get("/logout")
+async def logout():
+    response = RedirectResponse(url="/login", status_code=303)
+    response.delete_cookie(SESSION_COOKIE)
+    return response
 
 
 @app.get("/", response_class=HTMLResponse)
 async def landing_page(request: Request):
     """Landing page with hero section and feature cards."""
-    db = await get_db()
-    try:
-        cursor = await db.execute("SELECT COUNT(*) as count FROM audits")
-        row = await cursor.fetchone()
-        total_audits = row["count"]
-    finally:
-        await db.close()
+    user = await get_current_user(request)
+    total_audits = 0
+    if user:
+        db = await get_db()
+        try:
+            cursor = await db.execute(
+                "SELECT COUNT(*) as count FROM audits WHERE user_id = ?",
+                (user["id"],),
+            )
+            row = await cursor.fetchone()
+            total_audits = row["count"] if row else 0
+        finally:
+            await db.close()
 
     return templates.TemplateResponse(
         "index.html",
-        {"request": request, "total_audits": total_audits},
+        {"request": request, "current_user": user, "total_audits": total_audits, "active_page": "home"},
     )
 
 
 @app.get("/audit", response_class=HTMLResponse)
 async def audit_form_page(request: Request):
     """Audit input form page."""
-    return templates.TemplateResponse("audit_form.html", {"request": request})
-
-
-@app.get("/audit/{audit_id}", response_class=HTMLResponse)
-async def audit_results_page(request: Request, audit_id: str):
-    """View audit results for a specific audit."""
-    db = await get_db()
-    try:
-        audit = await get_audit(db, audit_id)
-    finally:
-        await db.close()
-
-    if not audit:
-        raise HTTPException(status_code=404, detail="Audit not found")
-
-    # Parse raw_response for additional data
-    raw = {}
-    if audit.get("raw_response"):
-        try:
-            raw = json.loads(audit["raw_response"])
-        except json.JSONDecodeError:
-            pass
-
-    # Group findings by severity
-    severity_order = ["critical", "high", "medium", "low", "info"]
-    grouped_findings = {}
-    for sev in severity_order:
-        findings = [f for f in audit.get("findings", []) if f["severity"] == sev]
-        if findings:
-            grouped_findings[sev] = findings
-
-    return templates.TemplateResponse(
-        "audit_results.html",
-        {
-            "request": request,
-            "audit": audit,
-            "grouped_findings": grouped_findings,
-            "severity_order": severity_order,
-            "raw": raw,
-        },
-    )
-
-
-@app.get("/analytics", response_class=HTMLResponse)
-async def analytics_page(request: Request):
-    """Analytics dashboard page."""
-    return templates.TemplateResponse("analytics.html", {"request": request})
+    user = await get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+    return templates.TemplateResponse("audit_form.html", {"request": request, "current_user": user, "active_page": "audit"})
 
 
 @app.get("/audit/standards", response_class=HTMLResponse)
 async def standards_form_page(request: Request):
     """Standards & Requirements audit input form page."""
-    return templates.TemplateResponse("standards_form.html", {"request": request})
+    user = await get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+    return templates.TemplateResponse("standards_form.html", {"request": request, "current_user": user, "active_page": "standards"})
 
 
 @app.get("/audit/standards/{audit_id}", response_class=HTMLResponse)
 async def standards_results_page(request: Request, audit_id: str):
     """View standards audit results for a specific audit."""
+    user = await get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
     db = await get_db()
     try:
         audit = await get_audit(db, audit_id)
@@ -132,6 +227,9 @@ async def standards_results_page(request: Request, audit_id: str):
 
     if not audit:
         raise HTTPException(status_code=404, detail="Audit not found")
+
+    if audit.get("user_id") and audit.get("user_id") != user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     # Parse raw_response for additional data (requirements_checklist, standards_summary)
     raw = {}
@@ -161,6 +259,7 @@ async def standards_results_page(request: Request, audit_id: str):
         "standards_results.html",
         {
             "request": request,
+            "current_user": user,
             "audit": audit,
             "grouped_findings": grouped_findings,
             "severity_order": severity_order,
@@ -172,12 +271,71 @@ async def standards_results_page(request: Request, audit_id: str):
     )
 
 
+@app.get("/audit/{audit_id}", response_class=HTMLResponse)
+async def audit_results_page(request: Request, audit_id: str):
+    """View audit results for a specific audit."""
+    user = await get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+    db = await get_db()
+    try:
+        audit = await get_audit(db, audit_id)
+    finally:
+        await db.close()
+
+    if not audit:
+        raise HTTPException(status_code=404, detail="Audit not found")
+
+    if audit.get("user_id") and audit.get("user_id") != user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Parse raw_response for additional data
+    raw = {}
+    if audit.get("raw_response"):
+        try:
+            raw = json.loads(audit["raw_response"])
+        except json.JSONDecodeError:
+            pass
+
+    # Group findings by severity
+    severity_order = ["critical", "high", "medium", "low", "info"]
+    grouped_findings = {}
+    for sev in severity_order:
+        findings = [f for f in audit.get("findings", []) if f["severity"] == sev]
+        if findings:
+            grouped_findings[sev] = findings
+
+    return templates.TemplateResponse(
+        "audit_results.html",
+        {
+            "request": request,
+            "current_user": user,
+            "audit": audit,
+            "grouped_findings": grouped_findings,
+            "severity_order": severity_order,
+            "raw": raw,
+        },
+    )
+
+
+@app.get("/analytics", response_class=HTMLResponse)
+async def analytics_page(request: Request):
+    """Analytics dashboard page."""
+    user = await get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+    return templates.TemplateResponse("analytics.html", {"request": request, "current_user": user, "active_page": "analytics"})
+
+
 # ── API Endpoints ──────────────────────────────────────────────────────────────
 
 
 @app.post("/audit/paste")
 async def audit_paste(request: Request, code: str = Form(...), filename: str = Form(None)):
     """Submit pasted code for AI audit."""
+    user = await get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
     if not code or not code.strip():
         raise HTTPException(status_code=400, detail="Code cannot be empty")
 
@@ -191,10 +349,7 @@ async def audit_paste(request: Request, code: str = Form(...), filename: str = F
 
     try:
         # Run AI audit
-        result = audit_code(code, filename=filename, language_hint=language)
-        # Handle both sync and async
-        if hasattr(result, "__await__"):
-            result = await result
+        result = await audit_code(code, filename=filename, language_hint=language)
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
     except ValueError as e:
@@ -204,6 +359,7 @@ async def audit_paste(request: Request, code: str = Form(...), filename: str = F
     audit_id = str(uuid.uuid4())
     audit_data = {
         "id": audit_id,
+        "user_id": user["id"],
         "created_at": datetime.now(timezone.utc).isoformat(),
         "language": result.get("language", language),
         "filename": filename,
@@ -227,6 +383,92 @@ async def audit_paste(request: Request, code: str = Form(...), filename: str = F
     return RedirectResponse(url=f"/audit/{audit_id}", status_code=303)
 
 
+@app.post("/audit/upload")
+async def audit_upload(request: Request, file: UploadFile = File(...)):
+    """Upload a ZIP archive for code audit."""
+    user = await get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
+    if not file.filename or not file.filename.lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Only .zip files are accepted.")
+
+    file_bytes = await file.read()
+    if len(file_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File exceeds 10MB limit.")
+
+    try:
+        extracted = extract_zip(file_bytes)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if not extracted:
+        raise HTTPException(status_code=400, detail="No valid source files found in archive.")
+
+    all_findings, all_topics = [], set()
+    total_scores = {"security": [], "accessibility": [], "performance": [], "maintainability": [], "overall": []}
+    file_results = []
+
+    for ef in extracted:
+        try:
+            result = await audit_code(ef["content"], filename=ef["filename"], language_hint=ef["language"])
+            file_results.append({
+                "filename": ef["filename"],
+                "language": result.get("language", ef["language"]),
+                "summary": result.get("summary", ""),
+                "scores": result.get("scores", {}),
+                "findings_count": len(result.get("findings", [])),
+            })
+            for finding in result.get("findings", []):
+                finding["source_file"] = ef["filename"]
+                all_findings.append(finding)
+            for topic in result.get("topics_detected", []):
+                all_topics.add(topic)
+            for key in total_scores:
+                if key in result.get("scores", {}):
+                    total_scores[key].append(result["scores"][key])
+        except Exception:
+            continue
+
+    avg_scores = {k: round(sum(v) / len(v)) if v else 50 for k, v in total_scores.items()}
+    languages = [ef["language"] for ef in extracted]
+    most_common_lang = max(set(languages), key=languages.count) if languages else "unknown"
+
+    aggregate_result = {
+        "language": most_common_lang,
+        "summary": f"ZIP archive audit of {file.filename}: analyzed {len(extracted)} files.",
+        "findings": all_findings,
+        "scores": avg_scores,
+        "topics_detected": list(all_topics),
+        "complexity_level": "advanced" if len(extracted) > 5 else "intermediate",
+        "file_results": file_results,
+    }
+
+    audit_id = str(uuid.uuid4())
+    audit_data = {
+        "id": audit_id,
+        "user_id": user["id"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "language": most_common_lang,
+        "filename": file.filename,
+        "source_type": "zip",
+        "code_length": sum(ef["size"] for ef in extracted),
+        "scores": avg_scores,
+        "complexity_level": aggregate_result["complexity_level"],
+        "summary": aggregate_result["summary"],
+        "findings": all_findings,
+        "topics_detected": list(all_topics),
+        "raw_response": json.dumps(aggregate_result),
+    }
+    db = await get_db()
+    try:
+        await save_audit(db, audit_data)
+    finally:
+        await db.close()
+
+    return RedirectResponse(url=f"/audit/{audit_id}", status_code=303)
+
+
 @app.post("/audit/standards")
 async def audit_standards(
     request: Request,
@@ -239,6 +481,10 @@ async def audit_standards(
     additional_notes: str = Form(""),
 ):
     """Submit code for a requirements-aware standards audit."""
+    user = await get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
     if not code or not code.strip():
         raise HTTPException(status_code=400, detail="Code cannot be empty")
 
@@ -265,11 +511,9 @@ async def audit_standards(
     language = detect_language(filename=filename, code=code)
 
     try:
-        result = audit_code_with_requirements(
+        result = await audit_code_with_requirements(
             code, requirements, filename=filename, language_hint=language
         )
-        if hasattr(result, "__await__"):
-            result = await result
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
     except ValueError as e:
@@ -279,6 +523,7 @@ async def audit_standards(
     audit_id = str(uuid.uuid4())
     audit_data = {
         "id": audit_id,
+        "user_id": user["id"],
         "created_at": datetime.now(timezone.utc).isoformat(),
         "language": result.get("language", language),
         "filename": filename,
@@ -314,6 +559,10 @@ async def audit_standards_file(
     additional_notes: str = Form(""),
 ):
     """Upload a single source file for standards audit."""
+    user = await get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided.")
 
@@ -342,15 +591,14 @@ async def audit_standards_file(
     language = detect_language(filename=file.filename, code=code)
 
     try:
-        result = audit_code_with_requirements(code, requirements, filename=file.filename, language_hint=language)
-        if hasattr(result, "__await__"):
-            result = await result
+        result = await audit_code_with_requirements(code, requirements, filename=file.filename, language_hint=language)
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
     audit_id = str(uuid.uuid4())
     audit_data = {
         "id": audit_id,
+        "user_id": user["id"],
         "created_at": datetime.now(timezone.utc).isoformat(),
         "language": result.get("language", language),
         "filename": file.filename,
@@ -383,6 +631,10 @@ async def audit_standards_zip(
     additional_notes: str = Form(""),
 ):
     """Upload a ZIP archive for multi-file standards audit."""
+    user = await get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
     if not file.filename or not file.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=400, detail="Only .zip files are accepted.")
 
@@ -412,12 +664,10 @@ async def audit_standards_zip(
 
     for ef in extracted:
         try:
-            result = audit_code_with_requirements(
+            result = await audit_code_with_requirements(
                 ef["content"], requirements,
                 filename=ef["filename"], language_hint=ef["language"]
             )
-            if hasattr(result, "__await__"):
-                result = await result
 
             file_results.append({
                 "filename": ef["filename"],
@@ -477,6 +727,7 @@ async def audit_standards_zip(
     audit_id = str(uuid.uuid4())
     audit_data = {
         "id": audit_id,
+        "user_id": user["id"],
         "created_at": datetime.now(timezone.utc).isoformat(),
         "language": most_common_lang,
         "filename": file.filename,
@@ -509,6 +760,10 @@ async def audit_standards_github(
     additional_notes: str = Form(""),
 ):
     """Fetch a GitHub file or repo and run a standards audit."""
+    user = await get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
     github_url = github_url.strip()
     if not github_url:
         raise HTTPException(status_code=400, detail="GitHub URL is required.")
@@ -553,15 +808,14 @@ async def audit_standards_github(
     language = detect_language(filename=detected_filename, code=code)
 
     try:
-        result = audit_code_with_requirements(code, requirements, filename=detected_filename, language_hint=language)
-        if hasattr(result, "__await__"):
-            result = await result
+        result = await audit_code_with_requirements(code, requirements, filename=detected_filename, language_hint=language)
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
     audit_id = str(uuid.uuid4())
     audit_data = {
         "id": audit_id,
+        "user_id": user["id"],
         "created_at": datetime.now(timezone.utc).isoformat(),
         "language": result.get("language", language),
         "filename": detected_filename or github_url,
@@ -630,18 +884,24 @@ def _github_url_to_raw(url: str) -> tuple[str | None, str | None]:
 
 
 @app.get("/api/analytics")
-async def api_analytics():
-    """JSON API for analytics data (consumed by Chart.js)."""
+async def api_analytics(request: Request):
+    """JSON API for analytics data (consumed by Chart.js), scoped to current user."""
+    user = await get_current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"error": "Not authenticated"})
     db = await get_db()
     try:
-        data = await get_full_analytics(db)
+        data = await get_full_analytics(db, user_id=user["id"])
     finally:
         await db.close()
     return JSONResponse(content=data)
 
 @app.get("/api/audit/{audit_id}/export")
-async def export_audit(audit_id: str):
+async def export_audit(request: Request, audit_id: str):
     """Export audit results as JSON."""
+    user = await get_current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"error": "Not authenticated"})
     db = await get_db()
     try:
         audit = await get_audit(db, audit_id)
@@ -651,6 +911,14 @@ async def export_audit(audit_id: str):
     if not audit:
         raise HTTPException(status_code=404, detail="Audit not found")
 
+    if audit.get("user_id") and audit.get("user_id") != user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
     return JSONResponse(content=audit)
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
 
 

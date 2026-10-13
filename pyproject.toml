@@ -38,3 +38,10 @@ asyncio_mode = "auto"
 line-length = 120
 target-version = "py310"
 exclude = ["tests/fixtures/malformed_sample.py"]
+
+[tool.pyrefly]
+search_path = [".", "code-auditor"]
+
+[tool.pyright]
+extraPaths = ["code-auditor"]
+

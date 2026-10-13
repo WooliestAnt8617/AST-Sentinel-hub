@@ -7,10 +7,12 @@
 function setChartDefaults() {
     if (typeof Chart === 'undefined') return;
 
-    Chart.defaults.color = '#a1a1aa';
-    Chart.defaults.borderColor = 'rgba(255, 255, 255, 0.06)';
+    Chart.defaults.color = '#f4f4f5';
+    Chart.defaults.borderColor = 'rgba(255, 255, 255, 0.08)';
     Chart.defaults.font.family = "'Inter', sans-serif";
     Chart.defaults.font.size = 12;
+    Chart.defaults.plugins.legend.labels.color = '#f4f4f5';
+    Chart.defaults.plugins.legend.labels.font = { family: "'Inter', sans-serif", size: 12, weight: '500' };
     Chart.defaults.plugins.legend.labels.usePointStyle = true;
     Chart.defaults.plugins.legend.labels.pointStyleWidth = 8;
     Chart.defaults.plugins.legend.labels.padding = 16;
@@ -136,12 +138,15 @@ function renderSeverityChart(data) {
                 legend: {
                     position: 'right',
                     labels: {
+                        color: '#f4f4f5',
+                        font: { size: 13, weight: '500' },
                         generateLabels: function(chart) {
                             const dataset = chart.data.datasets[0];
                             return chart.data.labels.map((label, i) => ({
                                 text: `${label} (${dataset.data[i]})`,
                                 fillStyle: dataset.backgroundColor[i],
                                 strokeStyle: 'transparent',
+                                fontColor: '#f4f4f5',
                                 pointStyle: 'circle',
                                 index: i,
                             }));

@@ -6,6 +6,8 @@ Constructs prompts, calls the Gemini API, and parses structured JSON responses.
 import json
 import os
 import re
+from pathlib import Path
+from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
@@ -18,6 +20,11 @@ def get_client() -> genai.Client:
     global _client
     if _client is None:
         api_key = os.getenv("GEMINI_API_KEY", "")
+        if not api_key or api_key == "your_api_key_here":
+            env_file = Path(__file__).resolve().parent.parent / ".env"
+            if env_file.exists():
+                load_dotenv(dotenv_path=env_file, override=True)
+                api_key = os.getenv("GEMINI_API_KEY", "")
         if not api_key or api_key == "your_api_key_here":
             raise ValueError(
                 "GEMINI_API_KEY is not set. Please add it to your .env file."
@@ -146,7 +153,7 @@ async def audit_code(code: str, filename: str | None = None, language_hint: str 
 
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.8-flash",
             contents=user_prompt,
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,
@@ -223,7 +230,7 @@ async def audit_code_with_requirements(
 
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.8-flash",
             contents=user_prompt,
             config=types.GenerateContentConfig(
                 system_instruction=REQUIREMENTS_SYSTEM_PROMPT,

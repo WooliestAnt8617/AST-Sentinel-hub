@@ -25,19 +25,35 @@
         </p>
 
         <div class="hero__actions">
+            {% if current_user %}
             <a href="/audit" class="btn btn--primary btn--lg">
                 ⚡ Start Auditing
             </a>
             <a href="/analytics" class="btn btn--secondary btn--lg">
                 📊 View Analytics
             </a>
+            {% else %}
+            <a href="/signup" class="btn btn--primary btn--lg">
+                🚀 Get Started Free
+            </a>
+            <a href="/login" class="btn btn--secondary btn--lg">
+                🔑 Sign In
+            </a>
+            {% endif %}
         </div>
 
         <div class="hero__stats">
+            {% if current_user %}
             <div class="hero__stat" data-animate>
                 <div class="hero__stat-value gradient-text" data-count-target="{{ total_audits }}">0</div>
-                <div class="hero__stat-label">Audits Performed</div>
+                <div class="hero__stat-label">Your Audits</div>
             </div>
+            {% else %}
+            <div class="hero__stat" data-animate>
+                <div class="hero__stat-value gradient-text">🔒 100%</div>
+                <div class="hero__stat-label">Private & Isolated</div>
+            </div>
+            {% endif %}
             <div class="hero__stat" data-animate>
                 <div class="hero__stat-value gradient-text">6</div>
                 <div class="hero__stat-label">Audit Categories</div>
@@ -59,7 +75,7 @@
         </p>
 
         <div class="features-grid">
-            <a href="/audit" class="feature-card glass-card" data-animate>
+            <a href="{% if current_user %}/audit{% else %}/login{% endif %}" class="feature-card glass-card" data-animate>
                 <div class="feature-card__icon">🔍</div>
                 <h3 class="feature-card__title heading-md">Code Auditor</h3>
                 <p class="feature-card__desc">
@@ -68,16 +84,16 @@
                 </p>
             </a>
 
-            <a href="/analytics" class="feature-card glass-card" data-animate>
+            <a href="{% if current_user %}/analytics{% else %}/login{% endif %}" class="feature-card glass-card" data-animate>
                 <div class="feature-card__icon">📊</div>
-                <h3 class="feature-card__title heading-md">Global Analytics</h3>
+                <h3 class="feature-card__title heading-md">Your Analytics</h3>
                 <p class="feature-card__desc">
-                    Track aggregate insights across all audits — top languages, severity distributions,
+                    Track aggregate insights across all your personal audits — top languages, severity distributions,
                     score trends, and topic-severity heatmaps.
                 </p>
             </a>
 
-            <a href="/audit/standards" class="feature-card glass-card" data-animate>
+            <a href="{% if current_user %}/audit/standards{% else %}/login{% endif %}" class="feature-card glass-card" data-animate>
                 <div class="feature-card__icon">📋</div>
                 <h3 class="feature-card__title heading-md">Standards Audit</h3>
                 <p class="feature-card__desc">

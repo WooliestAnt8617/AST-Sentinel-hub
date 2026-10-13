@@ -31,9 +31,21 @@
             </a>
             <ul class="navbar__links">
                 <li><a href="/" class="navbar__link {% if active_page == 'home' %}navbar__link--active{% endif %}">Home</a></li>
+                {% if current_user %}
                 <li><a href="/analytics" class="navbar__link {% if active_page == 'analytics' %}navbar__link--active{% endif %}">Analytics</a></li>
                 <li><a href="/audit/standards" class="navbar__link {% if active_page == 'standards' %}navbar__link--active{% endif %}">📋 Standards Audit</a></li>
                 <li><a href="/audit" class="navbar__link navbar__link--cta">⚡ Start Audit</a></li>
+                <li>
+                    <div class="navbar__user">
+                        <div class="navbar__user-avatar">{{ current_user.username[0] | upper }}</div>
+                        <span class="navbar__user-name">{{ current_user.username }}</span>
+                        <a href="/logout" class="navbar__logout" title="Sign out">↩</a>
+                    </div>
+                </li>
+                {% else %}
+                <li><a href="/login" class="navbar__link {% if active_page == 'login' %}navbar__link--active{% endif %}">Sign In</a></li>
+                <li><a href="/signup" class="navbar__link navbar__link--cta">🚀 Sign Up</a></li>
+                {% endif %}
             </ul>
         </div>
     </nav>
@@ -51,7 +63,7 @@
 
     <!-- Footer -->
     <footer class="footer">
-        <p class="footer__text">Built with FastAPI & Google Gemini — Code Intelligence Platform</p>
+        <p class="footer__text">Built with FastAPI &amp; Google Gemini — Code Intelligence Platform</p>
     </footer>
 
     <!-- Scripts -->
