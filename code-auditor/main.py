@@ -88,12 +88,16 @@ async def require_auth_middleware(request: Request, call_next):
     All other pages redirect to /login; API routes return 401 Unauthorized.
     """
     path = request.url.path
+    if path.startswith("/static"):
+        response = await call_next(request)
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return response
+
     # Publicly accessible routes
     if (
         path == "/"
         or path.startswith("/login")
         or path.startswith("/signup")
-        or path.startswith("/static")
         or path.startswith("/download")
         or path == "/favicon.ico"
     ):
