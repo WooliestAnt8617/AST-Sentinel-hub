@@ -268,16 +268,16 @@
             <!-- Phase Tabs -->
             <div class="phase-tabs" role="tablist" id="phase-tabs">
                 <button class="phase-tab active" data-phase="paste" type="button">
-                    ✍️ Paste Code <span class="phase-tab__badge">Phase 1</span>
+                    ✍️ Paste Code <span class="phase-tab__badge"></span>
                 </button>
                 <button class="phase-tab" data-phase="file" type="button">
-                    📄 Upload File <span class="phase-tab__badge">Phase 2</span>
+                    📄 Upload File <span class="phase-tab__badge"></span>
                 </button>
                 <button class="phase-tab" data-phase="zip" type="button">
-                    📦 ZIP Archive <span class="phase-tab__badge">Phase 3</span>
+                    📦 ZIP Archive <span class="phase-tab__badge"></span>
                 </button>
                 <button class="phase-tab" data-phase="github" type="button">
-                    🔗 GitHub Link <span class="phase-tab__badge">Phase 4</span>
+                    🔗 GitHub Link <span class="phase-tab__badge"></span>
                 </button>
             </div>
 
@@ -367,17 +367,17 @@
                 <form id="form-github" action="/audit/standards/github" method="POST">
                     <div class="glass-card glass-card--static" style="padding:1.75rem;margin-bottom:1.5rem;">
                         <h2 class="heading-sm" style="margin-bottom:1.25rem;display:flex;align-items:center;gap:10px;">
-                            <span class="step-num">1</span> Enter a GitHub File URL
+                            <span class="step-num">1</span> Enter a GitHub Repository or File URL
                         </h2>
                         <p class="text-sm" style="margin-bottom:1rem;color:var(--text-secondary);">
-                            Paste a link to any public GitHub file. Supports blob, raw, and gist URLs.
+                            Paste a link to any public GitHub repository or single file. Whole repositories are downloaded and audited as a multi-file project.
                         </p>
                         <div class="form-group">
-                            <label class="form-label" for="github-url">GitHub File URL</label>
+                            <label class="form-label" for="github-url">GitHub Repository or File URL</label>
                             <div class="github-input-wrap">
                                 <span class="github-input-wrap__icon">🔗</span>
-                                <input type="url" id="github-url" name="github_url" class="form-input"
-                                    placeholder="https://github.com/user/repo/blob/main/path/to/file.py"
+                                <input type="text" id="github-url" name="github_url" class="form-input"
+                                    placeholder="https://github.com/user/repo or .../blob/main/path/to/file.py"
                                     autocomplete="off" autocorrect="off" spellcheck="false">
                             </div>
                             <div id="url-status" class="url-status"></div>
@@ -385,6 +385,7 @@
                         <div>
                             <p class="text-xs" style="color:var(--text-muted);margin-bottom:0.5rem;">Supported URL formats:</p>
                             <div class="github-examples">
+                                <span class="github-example" data-url="https://github.com/pallets/flask">github.com/user/repo (Full Repo)</span>
                                 <span class="github-example" data-url="https://github.com/user/repo/blob/main/app.py">github.com/.../blob/main/app.py</span>
                                 <span class="github-example" data-url="https://raw.githubusercontent.com/user/repo/main/app.py">raw.githubusercontent.com/...</span>
                                 <span class="github-example" data-url="https://gist.github.com/user/abc123">gist.github.com/user/id</span>
@@ -481,17 +482,24 @@
     const githubInput = document.getElementById('github-url');
     const urlStatus = document.getElementById('url-status');
     if (githubInput && urlStatus) {
-        const VALID_PAT = /^https?:\/\/(github\.com\/[^/]+\/[^/]+\/(blob|raw)\/[^/]+\/.+|raw\.githubusercontent\.com\/.+|gist\.github\.com\/.+)/i;
         githubInput.addEventListener('input', () => {
-            const val = githubInput.value.trim();
+            let val = githubInput.value.trim().replace(/^git\+/, '').split('#')[0].split('?')[0];
             if (!val) { urlStatus.textContent = ''; urlStatus.className = 'url-status'; return; }
-            if (VALID_PAT.test(val)) {
-                urlStatus.innerHTML = '✅ Valid GitHub URL';
-                urlStatus.className = 'url-status url-status--ok';
-            } else {
-                urlStatus.innerHTML = '⚠️ Use a blob/raw/gist URL (see examples below)';
-                urlStatus.className = 'url-status url-status--err';
-            }
+            if (!/^https?:\/\//i.test(val)) val = 'https://' + val;
+
+            try {
+                const u = new URL(val);
+                const host = u.hostname.toLowerCase();
+                const pathParts = u.pathname.replace(/^\/|\/$/g, '').split('/');
+                if ((host === 'github.com' && pathParts.length >= 2) || host === 'raw.githubusercontent.com' || host === 'gist.github.com') {
+                    const isRepo = host === 'github.com' && (pathParts.length === 2 || (pathParts.length >= 3 && pathParts[2] === 'tree'));
+                    urlStatus.innerHTML = isRepo ? '✅ Valid GitHub Repository (Multi-File Project)' : '✅ Valid GitHub Source File';
+                    urlStatus.className = 'url-status url-status--ok';
+                    return;
+                }
+            } catch(e) {}
+            urlStatus.innerHTML = '⚠️ Enter a valid repository (github.com/user/repo) or file URL';
+            urlStatus.className = 'url-status url-status--err';
         });
     }
 
@@ -549,26 +557,102 @@
     document.getElementById('form-paste')?.addEventListener('submit', e => {
         if (!pasteCode?.value?.trim()) { e.preventDefault(); showToast('Please paste some code.', 'error'); return; }
         if (!hasReq('paste')) { e.preventDefault(); showToast('Please specify at least one requirement.', 'error'); return; }
-        showLoading('Analyzing code against your requirements…');
+        showLoading('Auditing code against standards…', {
+            steps: [
+                'Parsing requirements',
+                'Synthesizing compliance rules',
+                'Checking code against standards',
+                'Compiling audit breakdown'
+            ],
+            thoughts: [
+                'Parsing selected industry standards…',
+                'Extracting custom compliance requirements…',
+                'Parsing syntax tree and code semantics…',
+                'Checking for OWASP / CWE pattern matches…',
+                'Evaluating cryptographic & authentication rules…',
+                'Reviewing input sanitization against compliance…',
+                'Verifying error handling and privacy policies…',
+                'Checking code style & maintainability standards…',
+                'Grading each standard requirement…',
+                'Generating pass/fail status per rule…',
+                'Synthesizing remediation recommendations…',
+                'Finalizing standards compliance report…'
+            ]
+        });
     });
 
     document.getElementById('form-file')?.addEventListener('submit', e => {
         if (!document.getElementById('file-input')?.files?.length) { e.preventDefault(); showToast('Please select a file to upload.', 'error'); return; }
         if (!hasReq('file')) { e.preventDefault(); showToast('Please specify at least one requirement.', 'error'); return; }
-        showLoading('Uploading and analyzing your file…');
+        showLoading('Uploading and auditing file against standards…', {
+            steps: [
+                'Uploading file',
+                'Parsing compliance rules',
+                'Deep standards verification',
+                'Compiling audit report'
+            ],
+            thoughts: [
+                'Uploading file to server…',
+                'Detecting language and source structure…',
+                'Applying active security & architecture standards…',
+                'Analyzing source code against compliance checklist…',
+                'Auditing third-party import safety…',
+                'Checking data privacy & logging hygiene…',
+                'Evaluating adherence to custom notes…',
+                'Calculating compliance scores…',
+                'Building standards verification matrix…',
+                'Finalizing report…'
+            ]
+        });
     });
 
     document.getElementById('form-zip')?.addEventListener('submit', e => {
         if (!document.getElementById('zip-input')?.files?.length) { e.preventDefault(); showToast('Please select a ZIP file.', 'error'); return; }
         if (!hasReq('zip')) { e.preventDefault(); showToast('Please specify at least one requirement.', 'error'); return; }
-        showLoading('Extracting ZIP and auditing all files…');
+        showLoading('Auditing repository archive against standards…', {
+            steps: [
+                'Unpacking archive',
+                'Discovering source files',
+                'Batch auditing against standards',
+                'Building multi-file matrix'
+            ],
+            thoughts: [
+                'Uploading archive…',
+                'Extracting project files…',
+                'Filtering scannable source code…',
+                'Scanning file 1 against standards…',
+                'Checking architectural boundaries…',
+                'Auditing credentials and configuration safety…',
+                'Scanning remaining files…',
+                'Aggregating compliance violations…',
+                'Calculating project compliance grade…',
+                'Compiling final multi-file standards report…'
+            ]
+        });
     });
 
     document.getElementById('form-github')?.addEventListener('submit', e => {
         const url = document.getElementById('github-url')?.value?.trim();
         if (!url) { e.preventDefault(); showToast('Please enter a GitHub URL.', 'error'); return; }
         if (!hasReq('github')) { e.preventDefault(); showToast('Please specify at least one requirement.', 'error'); return; }
-        showLoading('Fetching from GitHub and running audit…');
+        showLoading('Auditing GitHub source against standards…', {
+            steps: [
+                'Fetching GitHub source',
+                'Configuring compliance checklist',
+                'Scanning code against rules',
+                'Generating compliance report'
+            ],
+            thoughts: [
+                'Connecting to GitHub…',
+                'Downloading source content…',
+                'Loading active compliance requirements…',
+                'Evaluating code patterns against standards…',
+                'Scanning for OWASP vulnerabilities…',
+                'Inspecting API security and error patterns…',
+                'Scoring compliance adherence…',
+                'Formatting audit results…'
+            ]
+        });
     });
 })();
 </script>

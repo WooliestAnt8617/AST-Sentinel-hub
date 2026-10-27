@@ -203,15 +203,36 @@ def extract_zip(file_bytes: bytes) -> list[dict]:
             if total_uncompressed > MAX_UPLOAD_SIZE * 5:
                 raise ValueError("ZIP archive uncompressed size is too large")
 
+            # Check if all files share a common root directory (e.g., GitHub archive root: repo-branch/...)
+            file_entries = [info for info in zf.infolist() if not info.is_dir()]
+            common_prefix = ""
+            if file_entries and "/" in file_entries[0].filename:
+                candidate = file_entries[0].filename.split("/")[0] + "/"
+                if all(info.filename.startswith(candidate) for info in file_entries):
+                    common_prefix = candidate
+
+            # Primary code extensions to prioritize over docs/configs
+            primary_code_exts = {
+                ".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".go", ".rs", ".rb",
+                ".php", ".c", ".cpp", ".cc", ".cxx", ".h", ".hpp", ".cs", ".swift",
+                ".kt", ".scala", ".sql", ".sh", ".bash", ".dart", ".lua", ".ex",
+                ".hs", ".html", ".css",
+            }
+
+            def _entry_priority(info: zipfile.ZipInfo) -> tuple[int, str]:
+                rel_path = info.filename[len(common_prefix):] if common_prefix and info.filename.startswith(common_prefix) else info.filename
+                ext = PurePosixPath(rel_path).suffix.lower()
+                is_primary = 0 if ext in primary_code_exts else 1
+                return (is_primary, rel_path)
+
+            sorted_entries = sorted(file_entries, key=_entry_priority)
+
             extracted_files = []
             warning_truncated = False
 
-            for info in zf.infolist():
-                # Skip directories
-                if info.is_dir():
-                    continue
-
-                filepath = PurePosixPath(info.filename)
+            for info in sorted_entries:
+                rel_filename = info.filename[len(common_prefix):] if common_prefix and info.filename.startswith(common_prefix) else info.filename
+                filepath = PurePosixPath(rel_filename)
 
                 # Skip hidden files
                 if any(part.startswith(".") for part in filepath.parts[:-1]):
@@ -248,9 +269,9 @@ def extract_zip(file_bytes: bytes) -> list[dict]:
                     if not content.strip():
                         continue
 
-                    language = detect_language(filename=info.filename)
+                    language = detect_language(filename=rel_filename)
                     extracted_files.append({
-                        "filename": info.filename,
+                        "filename": rel_filename,
                         "content": content,
                         "language": language,
                         "size": len(content),

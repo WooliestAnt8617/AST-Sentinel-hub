@@ -13,7 +13,7 @@
                 <span class="gradient-text">Code Auditor</span>
             </h1>
             <p class="text-body" style="margin-bottom: 2rem;">
-                Paste code directly or upload a ZIP archive for AI-powered analysis.
+                Paste code directly, upload a ZIP archive, or provide a GitHub file link for AI-powered analysis.
             </p>
 
             <!-- Tab Bar -->
@@ -23,6 +23,9 @@
                 </button>
                 <button type="button" class="tab-btn" data-tab="upload">
                     📦 Upload ZIP
+                </button>
+                <button type="button" class="tab-btn" data-tab="github">
+                    🔗 GitHub Link
                 </button>
             </div>
 
@@ -85,6 +88,31 @@ if __name__ == '__main__':
 
                     <button type="submit" class="btn btn--primary btn--lg" style="width: 100%;">
                         📦 Upload & Analyze
+                    </button>
+                </form>
+            </div>
+
+            <!-- GitHub Tab -->
+            <div class="tab-panel" data-tab-panel="github">
+                <form id="github-form" action="/audit/github" method="POST">
+                    <div class="form-group">
+                        <label class="form-label" for="github-url-input">GitHub Repository or File URL</label>
+                        <input
+                            type="text"
+                            id="github-url-input"
+                            name="github_url"
+                            class="form-input"
+                            placeholder="https://github.com/user/repo or .../blob/main/app.py"
+                            autocomplete="off"
+                            required
+                        >
+                        <p class="file-upload-zone__hint" style="margin-top: 0.5rem; text-align: left;">
+                            Paste any GitHub repository link (e.g. <code>github.com/user/repo</code>) to audit the entire project, or a direct file URL (<code>.../blob/main/app.py</code>).
+                        </p>
+                    </div>
+
+                    <button type="submit" class="btn btn--primary btn--lg" style="width: 100%;">
+                        🔗 Fetch & Analyze from GitHub
                     </button>
                 </form>
             </div>

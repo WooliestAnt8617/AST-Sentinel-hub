@@ -107,7 +107,14 @@ function initFormSubmission() {
                 showToast('Please paste some code before submitting.', 'error');
                 return;
             }
-            showLoading('Analyzing your code with AI...');
+            showLoading('Analyzing your code with AI…', {
+                steps: [
+                    'Preparing code snippet',
+                    'Sending to Gemini AI',
+                    'Deep analysis in progress',
+                    'Building audit report',
+                ],
+            });
         });
     }
 
@@ -133,26 +140,289 @@ function initFormSubmission() {
                 return;
             }
 
-            showLoading('Extracting and analyzing files...');
+            showLoading('Extracting and analyzing files…', {
+                steps: [
+                    'Uploading ZIP archive',
+                    'Extracting source files',
+                    'Auditing each file with AI',
+                    'Aggregating results',
+                ],
+                thoughts: [
+                    'Uploading archive to server…',
+                    'Extracting files from ZIP…',
+                    'Detecting file languages…',
+                    'Scanning file 1 for vulnerabilities…',
+                    'Evaluating code complexity…',
+                    'Checking for hardcoded secrets…',
+                    'Reviewing error handling patterns…',
+                    'Scanning next file…',
+                    'Analyzing dependency imports…',
+                    'Cross-referencing security best practices…',
+                    'Computing per-file quality scores…',
+                    'Aggregating findings across all files…',
+                    'Ranking issues by severity…',
+                    'Building comprehensive report…',
+                    'Finalizing multi-file audit…',
+                ],
+            });
+        });
+    }
+
+    const githubForm = document.getElementById('github-form');
+    if (githubForm) {
+        githubForm.addEventListener('submit', (e) => {
+            const url = document.getElementById('github-url-input')?.value?.trim();
+            if (!url) {
+                e.preventDefault();
+                showToast('Please enter a GitHub URL.', 'error');
+                return;
+            }
+            const isRepo = !url.includes('/blob/') && !url.includes('/raw/') && !url.includes('raw.githubusercontent.com');
+
+            if (isRepo) {
+                showLoading('Fetching repository from GitHub…', {
+                    steps: [
+                        'Downloading repository archive',
+                        'Extracting source files',
+                        'Auditing each file with AI',
+                        'Compiling project report',
+                    ],
+                    thoughts: [
+                        'Connecting to GitHub…',
+                        'Downloading repository archive…',
+                        'Extracting project structure…',
+                        'Identifying key source files…',
+                        'Scanning for security issues…',
+                        'Evaluating code architecture…',
+                        'Checking authentication patterns…',
+                        'Reviewing API security…',
+                        'Analyzing error propagation…',
+                        'Inspecting data validation logic…',
+                        'Computing code quality metrics…',
+                        'Generating per-file summaries…',
+                        'Ranking findings by impact…',
+                        'Assembling project-wide report…',
+                        'Finalizing repository audit…',
+                    ],
+                });
+            } else {
+                showLoading('Fetching file from GitHub…', {
+                    steps: [
+                        'Fetching raw file content',
+                        'Sending to Gemini AI',
+                        'Deep analysis in progress',
+                        'Building audit report',
+                    ],
+                    thoughts: [
+                        'Connecting to GitHub…',
+                        'Downloading raw file content…',
+                        'Detecting programming language…',
+                        'Parsing abstract syntax tree…',
+                        'Scanning for vulnerabilities…',
+                        'Evaluating complexity metrics…',
+                        'Checking naming conventions…',
+                        'Reviewing error handling…',
+                        'Assessing performance patterns…',
+                        'Scoring code quality…',
+                        'Compiling recommendations…',
+                        'Finalizing audit report…',
+                    ],
+                });
+            }
         });
     }
 }
 
-// ── Loading Overlay ──────────────────────────────────────────────────────────
+// ── Loading Overlay — Dynamic Status Engine ──────────────────────────────────
 
-function showLoading(message) {
+let _loadingState = null;
+
+/**
+ * Show the loading overlay with rotating thinking messages, step timeline,
+ * progress bar, elapsed timer, and helpful tips.
+ *
+ * @param {string} message - Primary title text
+ * @param {object} [opts] - Optional overrides
+ * @param {string[]} [opts.thoughts] - Custom array of thinking messages
+ * @param {string[]} [opts.steps] - Custom array of step labels (4 items)
+ * @param {string[]} [opts.tips] - Custom array of tip messages
+ */
+function showLoading(message, opts = {}) {
+    // Clean up any previous loading state
+    if (_loadingState) hideLoading();
+
     const overlay = document.getElementById('loading-overlay');
-    const text = document.getElementById('loading-text');
-    if (overlay) {
-        overlay.classList.add('loading-overlay--visible');
-        if (text) text.textContent = message || 'Processing...';
+    const titleEl = document.getElementById('loading-text');
+    const thinkingEl = document.getElementById('loading-thinking');
+    const timerEl = document.getElementById('loading-timer');
+    const progressBar = document.getElementById('loading-progress-bar');
+    const tipEl = document.getElementById('loading-tip');
+    const stepsContainer = document.getElementById('loading-steps');
+
+    if (!overlay) return;
+
+    // ── Default thought sequences ────────────────────────────────────────
+    const defaultThoughts = [
+        'Initializing AI engine…',
+        'Parsing abstract syntax tree…',
+        'Scanning for security vulnerabilities…',
+        'Evaluating code complexity metrics…',
+        'Checking error handling patterns…',
+        'Analyzing naming conventions…',
+        'Reviewing dependency usage…',
+        'Detecting potential memory leaks…',
+        'Inspecting authentication flows…',
+        'Assessing API endpoint security…',
+        'Evaluating input validation logic…',
+        'Checking for hardcoded secrets…',
+        'Analyzing exception handling depth…',
+        'Reviewing concurrency patterns…',
+        'Measuring cyclomatic complexity…',
+        'Cross-referencing best practices…',
+        'Building detailed findings report…',
+        'Scoring code quality dimensions…',
+        'Compiling recommendations…',
+        'Finalizing audit results…',
+    ];
+
+    const defaultSteps = [
+        'Preparing request',
+        'Sending to AI engine',
+        'Analyzing code patterns',
+        'Generating report',
+    ];
+
+    const defaultTips = [
+        '💡 Larger files take longer to analyze',
+        '🔒 We check for OWASP Top 10 vulnerabilities',
+        '⚡ Performance anti-patterns are flagged automatically',
+        '🧮 Cyclomatic complexity is measured per function',
+        '📋 Each finding includes a suggested fix',
+        '🛡️ Powered by Google Gemini AI',
+        '🔍 We analyze 50+ programming languages',
+        '📊 Scores range from 0 (critical) to 100 (excellent)',
+    ];
+
+    const thoughts = opts.thoughts || defaultThoughts;
+    const steps    = opts.steps    || defaultSteps;
+    const tips     = opts.tips     || defaultTips;
+
+    // Set title
+    if (titleEl) titleEl.textContent = message || 'Analyzing your code…';
+
+    // Update step labels
+    if (stepsContainer) {
+        const stepEls = stepsContainer.querySelectorAll('.loading-step');
+        stepEls.forEach((el, i) => {
+            const span = el.querySelector('span');
+            if (span && steps[i]) span.textContent = steps[i];
+            el.classList.remove('loading-step--active', 'loading-step--done');
+        });
+        if (stepEls[0]) stepEls[0].classList.add('loading-step--active');
     }
+
+    // Reset progress
+    if (progressBar) progressBar.style.width = '0%';
+
+    // Show overlay
+    overlay.classList.add('loading-overlay--visible');
+
+    // ── State ────────────────────────────────────────────────────────────
+    const startTime = Date.now();
+    let thoughtIdx = 0;
+    let tipIdx = 0;
+    let currentStep = 0;
+
+    // Step timing (seconds): when each step becomes active
+    const stepTimings = [0, 3, 8, 18];
+
+    // ── Timer — update every second ──────────────────────────────────────
+    const timerInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        if (timerEl) {
+            if (elapsed < 60) {
+                timerEl.textContent = `${elapsed}s`;
+            } else {
+                const m = Math.floor(elapsed / 60);
+                const s = elapsed % 60;
+                timerEl.textContent = `${m}m ${s.toString().padStart(2, '0')}s`;
+            }
+        }
+
+        // Progress bar — eases up to ~92% and plateaus
+        if (progressBar) {
+            const pct = Math.min(92, 10 + elapsed * 2.5 - elapsed * elapsed * 0.015);
+            progressBar.style.width = `${Math.max(0, pct)}%`;
+        }
+
+        // Step advancement
+        for (let i = stepTimings.length - 1; i >= 0; i--) {
+            if (elapsed >= stepTimings[i] && currentStep < i) {
+                currentStep = i;
+                _advanceStep(stepsContainer, currentStep);
+                break;
+            }
+        }
+    }, 1000);
+
+    // ── Thought rotation — every 3s ──────────────────────────────────────
+    const thoughtInterval = setInterval(() => {
+        thoughtIdx = (thoughtIdx + 1) % thoughts.length;
+        if (thinkingEl) {
+            thinkingEl.classList.add('fade-out');
+            setTimeout(() => {
+                thinkingEl.textContent = thoughts[thoughtIdx];
+                thinkingEl.classList.remove('fade-out');
+            }, 250);
+        }
+    }, 3000);
+
+    // ── Tip rotation — every 6s ──────────────────────────────────────────
+    const tipInterval = setInterval(() => {
+        tipIdx = (tipIdx + 1) % tips.length;
+        if (tipEl) {
+            tipEl.classList.add('fade-out');
+            setTimeout(() => {
+                tipEl.textContent = tips[tipIdx];
+                tipEl.classList.remove('fade-out');
+            }, 300);
+        }
+    }, 6000);
+
+    _loadingState = { timerInterval, thoughtInterval, tipInterval };
+}
+
+function _advanceStep(container, stepIdx) {
+    if (!container) return;
+    const steps = container.querySelectorAll('.loading-step');
+    steps.forEach((el, i) => {
+        el.classList.remove('loading-step--active', 'loading-step--done');
+        if (i < stepIdx) {
+            el.classList.add('loading-step--done');
+        } else if (i === stepIdx) {
+            el.classList.add('loading-step--active');
+        }
+    });
 }
 
 function hideLoading() {
     const overlay = document.getElementById('loading-overlay');
+    const progressBar = document.getElementById('loading-progress-bar');
+
+    if (_loadingState) {
+        clearInterval(_loadingState.timerInterval);
+        clearInterval(_loadingState.thoughtInterval);
+        clearInterval(_loadingState.tipInterval);
+        _loadingState = null;
+    }
+
+    if (progressBar) progressBar.style.width = '100%';
+
     if (overlay) {
-        overlay.classList.remove('loading-overlay--visible');
+        setTimeout(() => {
+            overlay.classList.remove('loading-overlay--visible');
+            if (progressBar) progressBar.style.width = '0%';
+        }, 300);
     }
 }
 

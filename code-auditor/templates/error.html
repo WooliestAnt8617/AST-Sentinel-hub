@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Notice — AST-Sentinel{% endblock %}
+{% block meta_desc %}Notice or error details for your audit request.{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 680px; margin: 4rem auto; padding: 0 1.5rem;">
+    <div class="glass-card" style="padding: 2.5rem 2rem; text-align: center;">
+        <div style="font-size: 3rem; margin-bottom: 1rem; line-height: 1;">
+            {% if status_code == 404 %}🔍{% elif status_code == 504 %}⏱️{% elif status_code >= 500 %}⚠️{% else %}⚡{% endif %}
+        </div>
+        
+        <div style="display: inline-block; padding: 4px 12px; border-radius: 9999px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem;">
+            HTTP {{ status_code }}
+        </div>
+
+        <h1 class="heading-md" style="margin-bottom: 1rem;">
+            {% if status_code == 404 %}Not Found{% elif status_code == 504 %}Request Timed Out{% else %}Unable to Complete Request{% endif %}
+        </h1>
+
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-glass); border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 1.5rem; text-align: left;">
+            <p style="color: var(--text-primary); font-size: 0.9375rem; line-height: 1.6; margin: 0; white-space: pre-wrap; font-family: var(--font-sans);">{{ detail }}</p>
+        </div>
+
+        <div style="background: rgba(99, 102, 241, 0.05); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: var(--radius-md); padding: 1rem; margin-bottom: 2rem; text-align: left; font-size: 0.8125rem; color: var(--text-secondary);">
+            <strong style="color: var(--accent-primary); display: block; margin-bottom: 0.5rem;">💡 Tips for GitHub URLs:</strong>
+            <ul style="margin: 0; padding-left: 1.25rem; line-height: 1.6;">
+                <li><strong>Public Repositories:</strong> Ensure the repository is public (private repos require authentication).</li>
+                <li><strong>Repository Audits:</strong> Paste <code>https://github.com/owner/repository</code> to analyze up to 20 key source files.</li>
+                <li><strong>Specific File:</strong> Paste <code>https://github.com/owner/repo/blob/branch/path/to/file.py</code> or direct raw link.</li>
+                <li><strong>Network:</strong> GitHub servers may occasionally throttle or rate-limit requests. Retry in a moment if needed.</li>
+            </ul>
+        </div>
+
+        <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+            <button onclick="window.history.back()" class="btn btn--secondary">
+                ← Go Back
+            </button>
+            <a href="/audit" class="btn btn--primary">
+                ⚡ Standard Audit
+            </a>
+            <a href="/audit/standards" class="btn btn--secondary">
+                📋 Standards Audit
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

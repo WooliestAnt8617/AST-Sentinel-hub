@@ -17,7 +17,9 @@ BASE_DIR = Path(__file__).resolve().parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
+from urllib.parse import urlparse
 import httpx
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
@@ -53,6 +55,27 @@ app = FastAPI(
 BASE_DIR = Path(__file__).parent
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
+
+
+@app.exception_handler(StarletteHTTPException)
+@app.exception_handler(HTTPException)
+async def custom_http_exception_handler(request: Request, exc: HTTPException):
+    """Render a styled HTML error page for browsers, or JSON for API calls."""
+    accept = request.headers.get("accept", "")
+    if "application/json" in accept or request.url.path.startswith("/api/"):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+    user = await get_current_user(request)
+    return templates.TemplateResponse(
+        "error.html",
+        {
+            "request": request,
+            "status_code": exc.status_code,
+            "detail": exc.detail,
+            "current_user": user,
+        },
+        status_code=exc.status_code,
+    )
 
 
 # ── Auth Enforcement Middleware ───────────────────────────────────────────
@@ -502,6 +525,331 @@ async def audit_upload(request: Request, file: UploadFile = File(...)):
     return RedirectResponse(url=f"/audit/{audit_id}", status_code=303)
 
 
+# ── GitHub Integration Helpers ────────────────────────────────────────────────
+
+def _parse_github_url(url: str) -> dict | None:
+    """
+    Parse any GitHub URL: whole repositories, branches, single files, raw URLs, and gists.
+
+    Supported formats:
+    - https://github.com/owner/repo (or github.com/owner/repo)
+    - https://github.com/owner/repo/tree/branch
+    - https://github.com/owner/repo/blob/branch/path/to/file.py
+    - https://github.com/owner/repo/raw/branch/path/to/file.py
+    - https://raw.githubusercontent.com/owner/repo/branch/path/to/file.py
+    - https://gist.github.com/owner/gist_id
+
+    Returns:
+      {
+        "kind": "repo" | "file",
+        "url": str,         # zipball archive URL for repos, raw text URL for files
+        "filename": str,    # detected filename or repo name
+        "repo": str | None, # "owner/repo"
+        "branch": str | None,
+      }
+      or None if unparseable.
+    """
+    if not url:
+        return None
+    url = url.strip()
+
+    # Strip git+ prefix
+    url = re.sub(r"^git\+", "", url)
+
+    # Strip fragments (#L1-L20) and query parameters (?raw=true)
+    clean_url = url.split("#")[0].split("?")[0].rstrip("/")
+
+    # Ensure http/https scheme
+    if not clean_url.startswith(("http://", "https://")):
+        clean_url = "https://" + clean_url
+
+    parsed = urlparse(clean_url)
+    host = parsed.netloc.lower()
+    path = parsed.path.strip("/")
+
+    # 1. Direct raw file: raw.githubusercontent.com/user/repo/branch/filepath...
+    if host == "raw.githubusercontent.com":
+        parts = path.split("/", 3)
+        if len(parts) >= 4:
+            user, repo, branch, filepath = parts
+            filename = filepath.split("/")[-1]
+            return {
+                "kind": "file",
+                "url": clean_url,
+                "filename": filename,
+                "repo": f"{user}/{repo}",
+                "branch": branch,
+            }
+        elif len(parts) >= 1:
+            return {
+                "kind": "file",
+                "url": clean_url,
+                "filename": parts[-1],
+                "repo": None,
+                "branch": None,
+            }
+
+    # 2. GitHub Gist: gist.github.com/user/gist_id
+    if host in ("gist.github.com", "gist.githubusercontent.com"):
+        parts = path.split("/")
+        if len(parts) >= 2:
+            user, gist_id = parts[0], parts[1]
+            raw_gist = f"https://gist.githubusercontent.com/{user}/{gist_id}/raw"
+            return {
+                "kind": "file",
+                "url": raw_gist,
+                "filename": f"gist_{gist_id[:8]}.txt",
+                "repo": f"gist/{user}/{gist_id}",
+                "branch": None,
+            }
+
+    # 3. Standard github.com
+    if host == "github.com":
+        parts = path.split("/")
+        if len(parts) >= 2:
+            user = parts[0]
+            repo = parts[1].removesuffix(".git")
+            repo_full = f"{user}/{repo}"
+
+            # Direct file (blob or raw): /user/repo/blob/{branch}/{path} or /user/repo/raw/{branch}/{path}
+            if len(parts) >= 5 and parts[2] in ("blob", "raw"):
+                branch = parts[3]
+                filepath = "/".join(parts[4:])
+                filename = parts[-1]
+                raw_file_url = f"https://raw.githubusercontent.com/{user}/{repo}/{branch}/{filepath}"
+                return {
+                    "kind": "file",
+                    "url": raw_file_url,
+                    "filename": filename,
+                    "repo": repo_full,
+                    "branch": branch,
+                }
+
+            # Tree branch / folder: /user/repo/tree/{branch}/...
+            if len(parts) >= 4 and parts[2] == "tree":
+                branch = parts[3]
+                zip_url = f"https://github.com/{user}/{repo}/archive/refs/heads/{branch}.zip"
+                return {
+                    "kind": "repo",
+                    "url": zip_url,
+                    "filename": f"{repo}-{branch}.zip",
+                    "repo": repo_full,
+                    "branch": branch,
+                }
+
+            # Whole repository: /user/repo
+            if len(parts) == 2:
+                zip_url = f"https://github.com/{user}/{repo}/archive/HEAD.zip"
+                return {
+                    "kind": "repo",
+                    "url": zip_url,
+                    "filename": f"{repo}.zip",
+                    "repo": repo_full,
+                    "branch": None,
+                }
+
+    return None
+
+
+def _github_url_to_raw(url: str) -> tuple[str | None, str | None]:
+    """Compatibility wrapper: returns (raw_url, filename) if URL points to a single file."""
+    parsed = _parse_github_url(url)
+    if parsed and parsed.get("kind") == "file":
+        return parsed["url"], parsed["filename"]
+    return None, None
+
+
+@app.post("/audit/github")
+async def audit_github(request: Request, github_url: str = Form(...)):
+    """Fetch a GitHub repository or direct file and run an AI audit."""
+    user = await get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
+    github_url = (github_url or "").strip()
+    if not github_url:
+        raise HTTPException(status_code=400, detail="GitHub URL is required.")
+
+    parsed = _parse_github_url(github_url)
+    if not parsed:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Could not parse GitHub URL. Supported formats:\n"
+                "• Full repository: https://github.com/owner/repository\n"
+                "• Branch: https://github.com/owner/repository/tree/main\n"
+                "• Direct file: https://github.com/owner/repository/blob/main/app.py\n"
+                "• Raw URL: https://raw.githubusercontent.com/owner/repository/main/app.py\n"
+                "• Gist: https://gist.github.com/owner/gist_id"
+            )
+        )
+
+    # ── Case A: Whole repository or branch ──────────────────────────────
+    if parsed["kind"] == "repo":
+        try:
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+                headers = {
+                    "User-Agent": "AST-Sentinel/1.0",
+                    "Accept": "application/vnd.github.v3+json, application/zip",
+                }
+                resp = await client.get(parsed["url"], headers=headers)
+                resp.raise_for_status()
+                zip_bytes = resp.content
+        except httpx.TimeoutException:
+            raise HTTPException(
+                status_code=504,
+                detail=f"Downloading repository '{parsed['repo']}' timed out. Please try again or use a direct file URL."
+            )
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Repository '{parsed['repo']}' not found or is private. Please ensure the repository is public."
+                )
+            raise HTTPException(
+                status_code=400,
+                detail=f"Could not download repository archive: HTTP {e.response.status_code}"
+            )
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Failed to fetch repository from GitHub: {str(e)}")
+
+        if len(zip_bytes) > 25 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Repository archive exceeds maximum 25MB limit.")
+
+        try:
+            extracted = extract_zip(zip_bytes)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+        if not extracted:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No valid source code files found in repository '{parsed['repo']}'."
+            )
+
+        all_findings, all_topics = [], set()
+        total_scores = {"security": [], "accessibility": [], "performance": [], "maintainability": [], "overall": []}
+        file_results = []
+
+        for ef in extracted:
+            try:
+                result = await audit_code(ef["content"], filename=ef["filename"], language_hint=ef["language"])
+                file_results.append({
+                    "filename": ef["filename"],
+                    "language": result.get("language", ef["language"]),
+                    "summary": result.get("summary", ""),
+                    "scores": result.get("scores", {}),
+                    "findings_count": len(result.get("findings", [])),
+                })
+                for finding in result.get("findings", []):
+                    finding["source_file"] = ef["filename"]
+                    all_findings.append(finding)
+                for topic in result.get("topics_detected", []):
+                    all_topics.add(topic)
+                for key in total_scores:
+                    if key in result.get("scores", {}):
+                        total_scores[key].append(result["scores"][key])
+            except Exception:
+                continue
+
+        avg_scores = {k: round(sum(v) / len(v)) if v else 50 for k, v in total_scores.items()}
+        languages = [ef["language"] for ef in extracted]
+        most_common_lang = max(set(languages), key=languages.count) if languages else "unknown"
+
+        repo_name = parsed["repo"] or "github-repo"
+        aggregate_result = {
+            "language": most_common_lang,
+            "summary": f"GitHub repository audit of {repo_name}: analyzed {len(extracted)} source files.",
+            "findings": all_findings,
+            "scores": avg_scores,
+            "topics_detected": list(all_topics),
+            "complexity_level": "advanced" if len(extracted) > 5 else "intermediate",
+            "file_results": file_results,
+            "github_url": github_url,
+            "repo_name": repo_name,
+        }
+
+        audit_id = str(uuid.uuid4())
+        audit_data = {
+            "id": audit_id,
+            "user_id": user["id"],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "language": most_common_lang,
+            "filename": f"github:{repo_name}",
+            "source_type": "github-repo",
+            "code_length": sum(ef["size"] for ef in extracted),
+            "scores": avg_scores,
+            "complexity_level": aggregate_result["complexity_level"],
+            "summary": aggregate_result["summary"],
+            "findings": all_findings,
+            "topics_detected": list(all_topics),
+            "raw_response": json.dumps(aggregate_result),
+        }
+        db = await get_db()
+        try:
+            await save_audit(db, audit_data)
+        finally:
+            await db.close()
+
+        return RedirectResponse(url=f"/audit/{audit_id}", status_code=303)
+
+    # ── Case B: Single file from GitHub ─────────────────────────────────
+    try:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            headers = {"Accept": "text/plain", "User-Agent": "AST-Sentinel/1.0"}
+            resp = await client.get(parsed["url"], headers=headers)
+            resp.raise_for_status()
+            code = resp.text
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="GitHub request timed out. Please try again.")
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            raise HTTPException(status_code=404, detail="GitHub file not found or is private. Check the URL and ensure the repo is public.")
+        raise HTTPException(status_code=400, detail=f"Could not fetch file from GitHub: HTTP {e.response.status_code}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch from GitHub: {str(e)}")
+
+    if not code.strip():
+        raise HTTPException(status_code=400, detail="The fetched file is empty.")
+    if len(code) > 100_000:
+        raise HTTPException(status_code=400, detail="File exceeds 100,000 character limit.")
+
+    detected_filename = parsed.get("filename")
+    language = detect_language(filename=detected_filename, code=code)
+
+    try:
+        result = await audit_code(code, filename=detected_filename, language_hint=language)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    audit_id = str(uuid.uuid4())
+    audit_data = {
+        "id": audit_id,
+        "user_id": user["id"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "language": result.get("language", language),
+        "filename": detected_filename or github_url,
+        "source_type": "github",
+        "code_length": len(code),
+        "scores": result.get("scores", {}),
+        "complexity_level": result.get("complexity_level", "intermediate"),
+        "summary": result.get("summary", ""),
+        "findings": result.get("findings", []),
+        "topics_detected": result.get("topics_detected", []),
+        "raw_response": json.dumps({**result, "github_url": github_url}),
+    }
+
+    db = await get_db()
+    try:
+        await save_audit(db, audit_data)
+    finally:
+        await db.close()
+
+    return RedirectResponse(url=f"/audit/{audit_id}", status_code=303)
+
+
 @app.post("/audit/standards")
 async def audit_standards(
     request: Request,
@@ -792,12 +1140,12 @@ async def audit_standards_github(
     naming_convention: str = Form(""),
     additional_notes: str = Form(""),
 ):
-    """Fetch a GitHub file or repo and run a standards audit."""
+    """Fetch a GitHub repository or file and run a standards audit."""
     user = await get_current_user(request)
     if not user:
         return RedirectResponse(url="/login", status_code=303)
 
-    github_url = github_url.strip()
+    github_url = (github_url or "").strip()
     if not github_url:
         raise HTTPException(status_code=400, detail="GitHub URL is required.")
 
@@ -811,24 +1159,168 @@ async def audit_standards_github(
     if not any(requirements.values()):
         raise HTTPException(status_code=400, detail="Please specify at least one audit requirement.")
 
-    # Convert GitHub web URLs to raw content URLs
-    raw_url, detected_filename = _github_url_to_raw(github_url)
-    if not raw_url:
+    parsed = _parse_github_url(github_url)
+    if not parsed:
         raise HTTPException(
             status_code=400,
-            detail="Could not parse GitHub URL. Please use a direct file URL (github.com/user/repo/blob/branch/file.py) or a raw URL."
+            detail=(
+                "Could not parse GitHub URL. Supported formats:\n"
+                "• Full repository: https://github.com/owner/repository\n"
+                "• Branch: https://github.com/owner/repository/tree/main\n"
+                "• Direct file: https://github.com/owner/repository/blob/main/app.py\n"
+                "• Raw URL: https://raw.githubusercontent.com/owner/repository/main/app.py\n"
+                "• Gist: https://gist.github.com/owner/gist_id"
+            )
         )
 
-    # Fetch the file content
+    # ── Case A: Whole repository or branch ──────────────────────────────
+    if parsed["kind"] == "repo":
+        try:
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+                headers = {
+                    "User-Agent": "AST-Sentinel/1.0",
+                    "Accept": "application/vnd.github.v3+json, application/zip",
+                }
+                resp = await client.get(parsed["url"], headers=headers)
+                resp.raise_for_status()
+                zip_bytes = resp.content
+        except httpx.TimeoutException:
+            raise HTTPException(
+                status_code=504,
+                detail=f"Downloading repository '{parsed['repo']}' timed out. Please try again or use a direct file URL."
+            )
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Repository '{parsed['repo']}' not found or is private. Please ensure the repository is public."
+                )
+            raise HTTPException(
+                status_code=400,
+                detail=f"Could not download repository archive: HTTP {e.response.status_code}"
+            )
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Failed to fetch repository from GitHub: {str(e)}")
+
+        if len(zip_bytes) > 25 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Repository archive exceeds maximum 25MB limit.")
+
+        try:
+            extracted = extract_zip(zip_bytes)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+        if not extracted:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No valid source code files found in repository '{parsed['repo']}'."
+            )
+
+        # Audit each file against the requirements
+        all_findings, all_topics = [], set()
+        total_scores = {"security": [], "accessibility": [], "performance": [], "maintainability": [], "overall": [], "standards": []}
+        all_checklists, file_results, errors = [], [], []
+
+        for ef in extracted:
+            try:
+                result = await audit_code_with_requirements(
+                    ef["content"], requirements,
+                    filename=ef["filename"], language_hint=ef["language"]
+                )
+
+                file_results.append({
+                    "filename": ef["filename"],
+                    "language": result.get("language", ef["language"]),
+                    "summary": result.get("summary", ""),
+                    "scores": result.get("scores", {}),
+                    "findings_count": len(result.get("findings", [])),
+                    "checklist_pass": sum(1 for c in result.get("requirements_checklist", []) if c.get("status") == "pass"),
+                    "checklist_total": len(result.get("requirements_checklist", [])),
+                })
+
+                for finding in result.get("findings", []):
+                    finding["source_file"] = ef["filename"]
+                    all_findings.append(finding)
+
+                for topic in result.get("topics_detected", []):
+                    all_topics.add(topic)
+
+                for key in total_scores:
+                    if key in result.get("scores", {}):
+                        total_scores[key].append(result["scores"][key])
+
+                for item in result.get("requirements_checklist", []):
+                    all_checklists.append(item)
+
+            except Exception as e:
+                errors.append({"filename": ef["filename"], "error": str(e)})
+
+        avg_scores = {k: round(sum(v) / len(v)) if v else 50 for k, v in total_scores.items()}
+
+        # Deduplicate checklist — worst status wins
+        STATUS_RANK = {"pass": 0, "partial": 1, "fail": 2}
+        deduped: dict[str, dict] = {}
+        for item in all_checklists:
+            key = item.get("requirement", "")
+            if key not in deduped or STATUS_RANK.get(item.get("status", ""), 0) > STATUS_RANK.get(deduped[key].get("status", ""), 0):
+                deduped[key] = item
+        merged_checklist = list(deduped.values())
+
+        languages = [ef["language"] for ef in extracted]
+        most_common_lang = max(set(languages), key=languages.count) if languages else "unknown"
+
+        repo_name = parsed["repo"] or "github-repo"
+        aggregate_result = {
+            "language": most_common_lang,
+            "summary": f"GitHub repository standards audit of {repo_name}: analyzed {len(extracted)} source files.",
+            "findings": all_findings,
+            "scores": avg_scores,
+            "topics_detected": list(all_topics),
+            "complexity_level": "advanced" if len(extracted) > 5 else "intermediate",
+            "requirements_checklist": merged_checklist,
+            "standards_summary": f"Audited {len(extracted)} files from {repo_name} against your requirements. Average compliance: {avg_scores.get('standards', 0)}/100.",
+            "file_results": file_results,
+            "errors": errors,
+            "github_url": github_url,
+            "repo_name": repo_name,
+        }
+
+        audit_id = str(uuid.uuid4())
+        audit_data = {
+            "id": audit_id,
+            "user_id": user["id"],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "language": most_common_lang,
+            "filename": f"github:{repo_name}",
+            "source_type": "standards-github-repo",
+            "code_length": sum(ef["size"] for ef in extracted),
+            "scores": avg_scores,
+            "complexity_level": aggregate_result["complexity_level"],
+            "summary": aggregate_result["summary"],
+            "findings": all_findings,
+            "topics_detected": list(all_topics),
+            "audit_requirements": json.dumps(requirements),
+            "raw_response": json.dumps(aggregate_result),
+        }
+        db = await get_db()
+        try:
+            await save_audit(db, audit_data)
+        finally:
+            await db.close()
+        return RedirectResponse(url=f"/audit/standards/{audit_id}", status_code=303)
+
+    # ── Case B: Single file from GitHub ─────────────────────────────────
     try:
         async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
             headers = {"Accept": "text/plain", "User-Agent": "AST-Sentinel/1.0"}
-            resp = await client.get(raw_url, headers=headers)
+            resp = await client.get(parsed["url"], headers=headers)
             resp.raise_for_status()
             code = resp.text
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="GitHub request timed out. Please try again.")
     except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            raise HTTPException(status_code=404, detail="GitHub file not found or is private. Check the URL and ensure the repo is public.")
         raise HTTPException(status_code=400, detail=f"Could not fetch file from GitHub: HTTP {e.response.status_code}")
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Failed to fetch from GitHub: {str(e)}")
@@ -838,6 +1330,7 @@ async def audit_standards_github(
     if len(code) > 100_000:
         raise HTTPException(status_code=400, detail="File exceeds 100,000 character limit.")
 
+    detected_filename = parsed.get("filename")
     language = detect_language(filename=detected_filename, code=code)
 
     try:
@@ -868,51 +1361,6 @@ async def audit_standards_github(
     finally:
         await db.close()
     return RedirectResponse(url=f"/audit/standards/{audit_id}", status_code=303)
-
-
-def _github_url_to_raw(url: str) -> tuple[str | None, str | None]:
-    """
-    Convert various GitHub URL formats to raw content URLs.
-
-    Supported formats:
-    - https://github.com/user/repo/blob/branch/path/to/file.py  → raw.githubusercontent.com
-    - https://raw.githubusercontent.com/...                      → unchanged
-    - https://github.com/user/repo/raw/branch/path/to/file.py   → unchanged path pattern
-    - https://gist.github.com/user/gist_id                       → raw gist
-    """
-    # Already a raw URL
-    if "raw.githubusercontent.com" in url:
-        filename = url.rstrip("/").split("/")[-1]
-        return url, filename
-
-    # github.com/user/repo/blob/branch/path
-    blob_match = re.match(
-        r"https?://github\.com/([^/]+)/([^/]+)/blob/([^/]+)/(.+)", url
-    )
-    if blob_match:
-        user, repo, branch, path = blob_match.groups()
-        raw_url = f"https://raw.githubusercontent.com/{user}/{repo}/{branch}/{path}"
-        filename = path.split("/")[-1]
-        return raw_url, filename
-
-    # github.com/user/repo/raw/branch/path (alternate)
-    raw_match = re.match(
-        r"https?://github\.com/([^/]+)/([^/]+)/raw/([^/]+)/(.+)", url
-    )
-    if raw_match:
-        user, repo, branch, path = raw_match.groups()
-        raw_url = f"https://raw.githubusercontent.com/{user}/{repo}/{branch}/{path}"
-        filename = path.split("/")[-1]
-        return raw_url, filename
-
-    # Gist raw: gist.github.com/user/id → try raw redirect
-    gist_match = re.match(r"https?://gist\.github\.com/([^/]+)/([a-f0-9]+)", url)
-    if gist_match:
-        user, gist_id = gist_match.groups()
-        raw_url = f"https://gist.githubusercontent.com/{user}/{gist_id}/raw"
-        return raw_url, f"gist_{gist_id[:8]}.txt"
-
-    return None, None
 
 
 

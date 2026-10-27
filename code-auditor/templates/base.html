@@ -59,8 +59,53 @@
 
     <!-- Loading Overlay -->
     <div id="loading-overlay" class="loading-overlay">
-        <div class="loading-spinner-lg"></div>
-        <p id="loading-text" class="loading-text">Analyzing your code...</p>
+        <div class="loading-card">
+            <!-- Animated shield icon -->
+            <div class="loading-card__icon">
+                <div class="loading-card__shield">🛡️</div>
+                <div class="loading-card__ring"></div>
+            </div>
+
+            <!-- Main status text -->
+            <p id="loading-text" class="loading-card__title">Analyzing your code…</p>
+
+            <!-- Thinking status - rotates through messages -->
+            <div class="loading-card__thinking">
+                <span class="loading-card__thinking-dot"></span>
+                <span id="loading-thinking" class="loading-card__thinking-text">Initializing AI engine…</span>
+            </div>
+
+            <!-- Step timeline -->
+            <div class="loading-card__steps" id="loading-steps">
+                <div class="loading-step loading-step--active" data-step="0">
+                    <div class="loading-step__dot"></div>
+                    <span>Preparing request</span>
+                </div>
+                <div class="loading-step" data-step="1">
+                    <div class="loading-step__dot"></div>
+                    <span>Sending to AI engine</span>
+                </div>
+                <div class="loading-step" data-step="2">
+                    <div class="loading-step__dot"></div>
+                    <span>Analyzing code patterns</span>
+                </div>
+                <div class="loading-step" data-step="3">
+                    <div class="loading-step__dot"></div>
+                    <span>Generating report</span>
+                </div>
+            </div>
+
+            <!-- Progress bar -->
+            <div class="loading-card__progress">
+                <div class="loading-card__progress-bar" id="loading-progress-bar"></div>
+            </div>
+
+            <!-- Timer -->
+            <div class="loading-card__meta">
+                <span class="loading-card__timer">⏱️ <span id="loading-timer">0s</span> elapsed</span>
+                <span class="loading-card__tip" id="loading-tip">💡 Larger files take longer to analyze</span>
+            </div>
+        </div>
     </div>
 
     <!-- Footer -->

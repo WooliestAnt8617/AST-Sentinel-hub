@@ -27,6 +27,25 @@ class SourceSubmission(BaseModel):
     filename: str = "<uploaded>"
 
 
+@router.get("/")
+async def root():
+    return {
+        "service": "AST-Sentinel REST API Server",
+        "status": "online",
+        "version": "0.1.0",
+        "interactive_docs": "/docs",
+        "health_check": "/health",
+        "api_endpoints": {
+            "scan_file": "POST /api/v1/scan/file",
+            "scan_directory": "POST /api/v1/scan/directory",
+            "scan_source": "POST /api/v1/scan/source",
+            "get_report_json": "GET /api/v1/report/{scan_id}",
+            "get_report_html": "GET /api/v1/report/{scan_id}/html",
+        },
+        "note": "Looking for the graphical web interface? Start the Code Auditor web app via 'python code-auditor/main.py' and visit http://127.0.0.1:8000",
+    }
+
+
 @router.get("/health", response_model=HealthResponse)
 async def health():
     from ast_sentinel.core.registry import get_registry

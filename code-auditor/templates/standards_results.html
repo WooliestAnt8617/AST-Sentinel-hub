@@ -192,10 +192,11 @@
                 {% endif %}
 
                 <!-- Pass/Fail/Partial counts -->
-                {% set pass_count = requirements_checklist | selectattr('status', 'equalto', 'pass') | list | length %}
-                {% set fail_count = requirements_checklist | selectattr('status', 'equalto', 'fail') | list | length %}
-                {% set partial_count = requirements_checklist | selectattr('status', 'equalto', 'partial') | list | length %}
-                {% if requirements_checklist %}
+                {% set checklist = requirements_checklist or [] %}
+                {% set pass_count = checklist | selectattr('status', 'equalto', 'pass') | list | length %}
+                {% set fail_count = checklist | selectattr('status', 'equalto', 'fail') | list | length %}
+                {% set partial_count = checklist | selectattr('status', 'equalto', 'partial') | list | length %}
+                {% if checklist %}
                 <div class="compliance-badges">
                     {% if pass_count > 0 %}
                     <span class="comp-badge comp-badge--pass">✓ {{ pass_count }} Passed</span>
@@ -234,7 +235,7 @@
         </div>
 
         <!-- ── Requirements Used ──────────────────────────────────────── -->
-        {% if audit_requirements %}
+        {% if audit_requirements and (audit_requirements.language_standard or audit_requirements.security_framework or audit_requirements.complexity_threshold or audit_requirements.naming_convention or audit_requirements.additional_notes) %}
         <div class="glass-card glass-card--static" style="padding: 1.5rem; margin-bottom: 1.5rem;">
             <h2 class="heading-sm" style="margin-bottom: 1rem;">📋 Requirements Audited Against</h2>
             <div class="req-used-grid">
@@ -273,9 +274,11 @@
         {% endif %}
 
         <!-- ── ZIP File Breakdown ──────────────────────────────────────── -->
-        {% if audit.source_type == 'standards-zip' and raw.get('file_results') %}
+        {% set file_results = raw.get('file_results', []) if (raw and raw.get) else [] %}
+        {% set zip_errors = raw.get('errors', []) if (raw and raw.get) else [] %}
+        {% if audit.source_type == 'standards-zip' and file_results %}
         <div class="glass-card glass-card--static" style="padding: 1.5rem; margin-bottom: 1.5rem;">
-            <h2 class="heading-sm" style="margin-bottom: 1rem;">📦 Per-File Results ({{ raw.file_results | length }} files)</h2>
+            <h2 class="heading-sm" style="margin-bottom: 1rem;">📦 Per-File Results ({{ file_results | length }} files)</h2>
             <div style="overflow-x: auto;">
                 <table class="file-results-table">
                     <thead>
@@ -288,24 +291,24 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for fr in raw.file_results %}
+                        {% for fr in file_results %}
                         <tr>
                             <td class="filename-col">{{ fr.filename }}</td>
-                            <td>{{ fr.language | capitalize }}</td>
+                            <td>{{ (fr.language or '') | capitalize }}</td>
                             <td>
-                                {% set s = fr.scores.get('standards', 0) if fr.scores else 0 %}
+                                {% set s = fr.scores.standards if (fr.scores and fr.scores.standards is defined) else (fr.scores.get('standards', 0) if (fr.scores and fr.scores.get) else 0) %}
                                 <span class="score-chip {% if s >= 70 %}score-chip--good{% elif s >= 40 %}score-chip--avg{% else %}score-chip--poor{% endif %}">{{ s }}</span>
                             </td>
-                            <td>{{ fr.findings_count }}</td>
-                            <td>{{ fr.checklist_pass }}/{{ fr.checklist_total }} passed</td>
+                            <td>{{ fr.findings_count or 0 }}</td>
+                            <td>{{ fr.checklist_pass or 0 }}/{{ fr.checklist_total or 0 }} passed</td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
-            {% if raw.get('errors') and raw.errors | length > 0 %}
+            {% if zip_errors and zip_errors | length > 0 %}
             <p class="text-sm" style="margin-top:0.75rem;color:var(--text-muted);">
-                ⚠️ {{ raw.errors | length }} file(s) could not be analyzed due to errors.
+                ⚠️ {{ zip_errors | length }} file(s) could not be analyzed due to errors.
             </p>
             {% endif %}
         </div>
@@ -413,7 +416,7 @@
                         {% if finding.line_start %}
                         <p class="finding-card__lines">
                             📍 Lines {{ finding.line_start }}{% if finding.line_end and finding.line_end != finding.line_start %}-{{ finding.line_end }}{% endif %}
-                            {% if finding.get('source_file') %} · {{ finding.source_file }}{% endif %}
+                            {% if finding.source_file %} · {{ finding.source_file }}{% endif %}
                         </p>
                         {% endif %}
                         {% if finding.suggestion %}
