@@ -93,21 +93,63 @@ function clearFileInput() {
     }
 }
 
-// ── Form Submission ──────────────────────────────────────────────────────────
+// ── Form Submission with Live Loading Screen ──────────────────────────────────
+
+async function submitFormWithLoading(form, opts = {}) {
+    showLoading(opts.title || 'Analyzing your code with AI…', opts);
+
+    try {
+        const formData = new FormData(form);
+        const response = await fetch(form.action, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (response.redirected) {
+            window.location.href = response.url;
+            return;
+        }
+
+        if (response.ok) {
+            window.location.href = response.url;
+            return;
+        }
+
+        // If not OK, handle error
+        hideLoading();
+        let errorMsg = 'Audit request failed. Please try again.';
+        try {
+            const errData = await response.json();
+            if (errData && errData.detail) errorMsg = errData.detail;
+        } catch (_) {
+            try {
+                const text = await response.text();
+                if (text && text.length < 200) errorMsg = text;
+            } catch (_) {}
+        }
+        showToast(errorMsg, 'error');
+
+    } catch (err) {
+        hideLoading();
+        showToast('Network error: ' + (err.message || 'Unable to connect to auditor service'), 'error');
+    }
+}
 
 function initFormSubmission() {
     const pasteForm = document.getElementById('paste-form');
     const uploadForm = document.getElementById('upload-form');
+    const githubForm = document.getElementById('github-form');
 
     if (pasteForm) {
         pasteForm.addEventListener('submit', (e) => {
+            e.preventDefault();
             const code = document.getElementById('code-input')?.value?.trim();
             if (!code) {
-                e.preventDefault();
                 showToast('Please paste some code before submitting.', 'error');
                 return;
             }
-            showLoading('Analyzing your code with AI…', {
+            submitFormWithLoading(pasteForm, {
+                title: 'Analyzing your code with AI…',
                 steps: [
                     'Preparing code snippet',
                     'Sending to Gemini AI',
@@ -120,27 +162,26 @@ function initFormSubmission() {
 
     if (uploadForm) {
         uploadForm.addEventListener('submit', (e) => {
+            e.preventDefault();
             const fileInput = document.getElementById('file-input');
             if (!fileInput?.files?.length) {
-                e.preventDefault();
                 showToast('Please select a ZIP file to upload.', 'error');
                 return;
             }
 
             const file = fileInput.files[0];
             if (file.size > 10 * 1024 * 1024) {
-                e.preventDefault();
                 showToast('File exceeds 10MB limit.', 'error');
                 return;
             }
 
             if (!file.name.toLowerCase().endsWith('.zip')) {
-                e.preventDefault();
                 showToast('Only .zip files are accepted.', 'error');
                 return;
             }
 
-            showLoading('Extracting and analyzing files…', {
+            submitFormWithLoading(uploadForm, {
+                title: 'Extracting and analyzing ZIP files…',
                 steps: [
                     'Uploading ZIP archive',
                     'Extracting source files',
@@ -168,19 +209,19 @@ function initFormSubmission() {
         });
     }
 
-    const githubForm = document.getElementById('github-form');
     if (githubForm) {
         githubForm.addEventListener('submit', (e) => {
+            e.preventDefault();
             const url = document.getElementById('github-url-input')?.value?.trim();
             if (!url) {
-                e.preventDefault();
                 showToast('Please enter a GitHub URL.', 'error');
                 return;
             }
             const isRepo = !url.includes('/blob/') && !url.includes('/raw/') && !url.includes('raw.githubusercontent.com');
 
             if (isRepo) {
-                showLoading('Fetching repository from GitHub…', {
+                submitFormWithLoading(githubForm, {
+                    title: 'Fetching repository from GitHub…',
                     steps: [
                         'Downloading repository archive',
                         'Extracting source files',
@@ -206,7 +247,8 @@ function initFormSubmission() {
                     ],
                 });
             } else {
-                showLoading('Fetching file from GitHub…', {
+                submitFormWithLoading(githubForm, {
+                    title: 'Fetching file from GitHub…',
                     steps: [
                         'Fetching raw file content',
                         'Sending to Gemini AI',

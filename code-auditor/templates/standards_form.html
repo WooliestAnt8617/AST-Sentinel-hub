@@ -554,10 +554,13 @@
         return [...sels].some(s => s.value) || (notes && notes.value.trim());
     }
 
-    document.getElementById('form-paste')?.addEventListener('submit', e => {
-        if (!pasteCode?.value?.trim()) { e.preventDefault(); showToast('Please paste some code.', 'error'); return; }
-        if (!hasReq('paste')) { e.preventDefault(); showToast('Please specify at least one requirement.', 'error'); return; }
-        showLoading('Auditing code against standards…', {
+    const pasteF = document.getElementById('form-paste');
+    pasteF?.addEventListener('submit', e => {
+        e.preventDefault();
+        if (!pasteCode?.value?.trim()) { showToast('Please paste some code.', 'error'); return; }
+        if (!hasReq('paste')) { showToast('Please specify at least one requirement.', 'error'); return; }
+        submitFormWithLoading(pasteF, {
+            title: 'Auditing code against standards…',
             steps: [
                 'Parsing requirements',
                 'Synthesizing compliance rules',
@@ -581,10 +584,13 @@
         });
     });
 
-    document.getElementById('form-file')?.addEventListener('submit', e => {
-        if (!document.getElementById('file-input')?.files?.length) { e.preventDefault(); showToast('Please select a file to upload.', 'error'); return; }
-        if (!hasReq('file')) { e.preventDefault(); showToast('Please specify at least one requirement.', 'error'); return; }
-        showLoading('Uploading and auditing file against standards…', {
+    const fileF = document.getElementById('form-file');
+    fileF?.addEventListener('submit', e => {
+        e.preventDefault();
+        if (!document.getElementById('file-input')?.files?.length) { showToast('Please select a file to upload.', 'error'); return; }
+        if (!hasReq('file')) { showToast('Please specify at least one requirement.', 'error'); return; }
+        submitFormWithLoading(fileF, {
+            title: 'Uploading and auditing file against standards…',
             steps: [
                 'Uploading file',
                 'Parsing compliance rules',
@@ -606,10 +612,13 @@
         });
     });
 
-    document.getElementById('form-zip')?.addEventListener('submit', e => {
-        if (!document.getElementById('zip-input')?.files?.length) { e.preventDefault(); showToast('Please select a ZIP file.', 'error'); return; }
-        if (!hasReq('zip')) { e.preventDefault(); showToast('Please specify at least one requirement.', 'error'); return; }
-        showLoading('Auditing repository archive against standards…', {
+    const zipF = document.getElementById('form-zip');
+    zipF?.addEventListener('submit', e => {
+        e.preventDefault();
+        if (!document.getElementById('zip-input')?.files?.length) { showToast('Please select a ZIP file.', 'error'); return; }
+        if (!hasReq('zip')) { showToast('Please specify at least one requirement.', 'error'); return; }
+        submitFormWithLoading(zipF, {
+            title: 'Auditing repository archive against standards…',
             steps: [
                 'Unpacking archive',
                 'Discovering source files',
@@ -631,11 +640,14 @@
         });
     });
 
-    document.getElementById('form-github')?.addEventListener('submit', e => {
+    const ghF = document.getElementById('form-github');
+    ghF?.addEventListener('submit', e => {
+        e.preventDefault();
         const url = document.getElementById('github-url')?.value?.trim();
-        if (!url) { e.preventDefault(); showToast('Please enter a GitHub URL.', 'error'); return; }
-        if (!hasReq('github')) { e.preventDefault(); showToast('Please specify at least one requirement.', 'error'); return; }
-        showLoading('Auditing GitHub source against standards…', {
+        if (!url) { showToast('Please enter a GitHub URL.', 'error'); return; }
+        if (!hasReq('github')) { showToast('Please specify at least one requirement.', 'error'); return; }
+        submitFormWithLoading(ghF, {
+            title: 'Auditing GitHub source against standards…',
             steps: [
                 'Fetching GitHub source',
                 'Configuring compliance checklist',

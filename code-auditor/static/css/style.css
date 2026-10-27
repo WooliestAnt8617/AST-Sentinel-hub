@@ -1187,9 +1187,9 @@ body {
 .loading-overlay {
     position: fixed;
     inset: 0;
-    z-index: 1000;
+    z-index: 999999 !important;
     background: rgba(9, 9, 11, 0.88);
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(14px);
     display: none;
     align-items: center;
     justify-content: center;
@@ -1198,7 +1198,7 @@ body {
 }
 
 .loading-overlay--visible {
-    display: flex;
+    display: flex !important;
     animation: loadingFadeIn 0.35s ease-out;
 }
 
