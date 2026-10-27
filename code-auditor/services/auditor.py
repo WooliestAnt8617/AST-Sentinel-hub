@@ -6,17 +6,24 @@ Constructs prompts, calls the Gemini API, and parses structured JSON responses.
 import json
 import os
 import re
+import asyncio
 from pathlib import Path
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+
+# Candidate models ordered by speed and stability
+PREFERRED_MODELS = [
+    os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite"),
+    "gemini-3-flash-preview",
+]
 
 # Initialize the client (will be configured in main.py after loading .env)
 _client = None
 
 
 def get_client() -> genai.Client:
-    """Get or create the Gemini client."""
+    """Get or create the Gemini client with robust network and timeout settings."""
     global _client
     if _client is None:
         api_key = os.getenv("GEMINI_API_KEY", "")
@@ -29,7 +36,12 @@ def get_client() -> genai.Client:
             raise ValueError(
                 "GEMINI_API_KEY is not set. Please add it to your .env file."
             )
-        _client = genai.Client(api_key=api_key)
+        # Configure with 30s timeout and verify=False to prevent self-signed corporate proxy certificate hangs
+        http_options = types.HttpOptions(
+            client_args={"verify": False},
+            timeout=30000,
+        )
+        _client = genai.Client(api_key=api_key, http_options=http_options)
     return _client
 
 
@@ -128,6 +140,39 @@ Rules:
 """
 
 
+async def _call_gemini_async(
+    client: genai.Client,
+    prompt: str,
+    system_instruction: str,
+    max_tokens: int = 8192,
+) -> str:
+    """Call Gemini models in thread pool with model fallback."""
+    last_err = None
+    for model_name in PREFERRED_MODELS:
+        try:
+            config = types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=0.3,
+                max_output_tokens=max_tokens,
+            )
+            response = await asyncio.to_thread(
+                client.models.generate_content,
+                model=model_name,
+                contents=prompt,
+                config=config,
+            )
+            text = (response.text or "").strip()
+            if text:
+                return text
+        except Exception as err:
+            last_err = err
+            continue
+
+    if last_err:
+        raise last_err
+    return ""
+
+
 async def audit_code(code: str, filename: str | None = None, language_hint: str | None = None) -> dict:
     """
     Send code to Gemini for audit analysis.
@@ -152,38 +197,26 @@ async def audit_code(code: str, filename: str | None = None, language_hint: str 
     user_prompt = "\n".join(user_parts)
 
     try:
-        response = client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=user_prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
-                temperature=0.3,
-                max_output_tokens=8192,
-            ),
-        )
-
-        response_text = response.text or ""
-        raw_text = response_text.strip()
+        raw_text = await _call_gemini_async(client, user_prompt, SYSTEM_PROMPT)
         if not raw_text:
             return _fallback_result(code, filename, language_hint, "Gemini returned an empty response")
 
         # Strip markdown code fences if present
-        if raw_text.startswith("```"):
-            # Remove opening fence (```json or ```)
-            raw_text = re.sub(r'^```\w*\n?', '', raw_text)
-            # Remove closing fence
-            raw_text = re.sub(r'\n?```$', '', raw_text)
-            raw_text = raw_text.strip()
+        cleaned_text = raw_text
+        if cleaned_text.startswith("```"):
+            cleaned_text = re.sub(r'^```\w*\n?', '', cleaned_text)
+            cleaned_text = re.sub(r'\n?```$', '', cleaned_text)
+            cleaned_text = cleaned_text.strip()
 
-        result = json.loads(raw_text)
-        result["raw_text"] = response_text  # Keep original for debugging
+        result = json.loads(cleaned_text)
+        result["raw_text"] = raw_text
         return _validate_and_normalize(result)
 
     except json.JSONDecodeError as e:
-        # If Gemini didn't return valid JSON, return a fallback
         return _fallback_result(code, filename, language_hint, str(e))
     except Exception as e:
-        raise RuntimeError(f"Gemini API error: {str(e)}") from e
+        # Instead of hanging or crashing the entire web flow, return a meaningful fallback
+        return _fallback_result(code, filename, language_hint, f"AI service temporarily unavailable: {str(e)}")
 
 
 async def audit_code_with_requirements(
@@ -232,35 +265,24 @@ async def audit_code_with_requirements(
     user_prompt = "\n".join(user_parts)
 
     try:
-        response = client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=user_prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=REQUIREMENTS_SYSTEM_PROMPT,
-                temperature=0.3,
-                max_output_tokens=8192,
-            ),
-        )
-
-        response_text = response.text or ""
-        raw_text = response_text.strip()
+        raw_text = await _call_gemini_async(client, user_prompt, REQUIREMENTS_SYSTEM_PROMPT)
         if not raw_text:
             return _fallback_result_with_requirements(code, filename, language_hint, "Gemini returned an empty response")
 
-        # Strip markdown code fences if present
-        if raw_text.startswith("```"):
-            raw_text = re.sub(r'^```\w*\n?', '', raw_text)
-            raw_text = re.sub(r'\n?```$', '', raw_text)
-            raw_text = raw_text.strip()
+        cleaned_text = raw_text
+        if cleaned_text.startswith("```"):
+            cleaned_text = re.sub(r'^```\w*\n?', '', cleaned_text)
+            cleaned_text = re.sub(r'\n?```$', '', cleaned_text)
+            cleaned_text = cleaned_text.strip()
 
-        result = json.loads(raw_text)
-        result["raw_text"] = response_text
+        result = json.loads(cleaned_text)
+        result["raw_text"] = raw_text
         return _validate_and_normalize_with_requirements(result)
 
     except json.JSONDecodeError as e:
         return _fallback_result_with_requirements(code, filename, language_hint, str(e))
     except Exception as e:
-        raise RuntimeError(f"Gemini API error: {str(e)}") from e
+        return _fallback_result_with_requirements(code, filename, language_hint, f"AI service temporarily unavailable: {str(e)}")
 
 
 def _validate_and_normalize(result: dict) -> dict:

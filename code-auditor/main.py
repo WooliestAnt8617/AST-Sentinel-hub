@@ -8,6 +8,7 @@ import json
 import uuid
 import re
 import sys
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -465,26 +466,37 @@ async def audit_upload(request: Request, file: UploadFile = File(...)):
     total_scores = {"security": [], "accessibility": [], "performance": [], "maintainability": [], "overall": []}
     file_results = []
 
-    for ef in extracted:
-        try:
-            result = await audit_code(ef["content"], filename=ef["filename"], language_hint=ef["language"])
-            file_results.append({
-                "filename": ef["filename"],
-                "language": result.get("language", ef["language"]),
-                "summary": result.get("summary", ""),
-                "scores": result.get("scores", {}),
-                "findings_count": len(result.get("findings", [])),
-            })
-            for finding in result.get("findings", []):
-                finding["source_file"] = ef["filename"]
-                all_findings.append(finding)
-            for topic in result.get("topics_detected", []):
-                all_topics.add(topic)
-            for key in total_scores:
-                if key in result.get("scores", {}):
-                    total_scores[key].append(result["scores"][key])
-        except Exception:
+    # Fast concurrent analysis: cap to top 5 primary code files
+    files_to_audit = extracted[:5]
+    sem = asyncio.Semaphore(3)
+
+    async def _audit_single(ef):
+        async with sem:
+            try:
+                res = await audit_code(ef["content"], filename=ef["filename"], language_hint=ef["language"])
+                return ef, res
+            except Exception:
+                return ef, None
+
+    audit_pairs = await asyncio.gather(*[_audit_single(ef) for ef in files_to_audit])
+    for ef, result in audit_pairs:
+        if not result:
             continue
+        file_results.append({
+            "filename": ef["filename"],
+            "language": result.get("language", ef["language"]),
+            "summary": result.get("summary", ""),
+            "scores": result.get("scores", {}),
+            "findings_count": len(result.get("findings", [])),
+        })
+        for finding in result.get("findings", []):
+            finding["source_file"] = ef["filename"]
+            all_findings.append(finding)
+        for topic in result.get("topics_detected", []):
+            all_topics.add(topic)
+        for key in total_scores:
+            if key in result.get("scores", {}):
+                total_scores[key].append(result["scores"][key])
 
     avg_scores = {k: round(sum(v) / len(v)) if v else 50 for k, v in total_scores.items()}
     languages = [ef["language"] for ef in extracted]
@@ -731,26 +743,37 @@ async def audit_github(request: Request, github_url: str = Form(...)):
         total_scores = {"security": [], "accessibility": [], "performance": [], "maintainability": [], "overall": []}
         file_results = []
 
-        for ef in extracted:
-            try:
-                result = await audit_code(ef["content"], filename=ef["filename"], language_hint=ef["language"])
-                file_results.append({
-                    "filename": ef["filename"],
-                    "language": result.get("language", ef["language"]),
-                    "summary": result.get("summary", ""),
-                    "scores": result.get("scores", {}),
-                    "findings_count": len(result.get("findings", [])),
-                })
-                for finding in result.get("findings", []):
-                    finding["source_file"] = ef["filename"]
-                    all_findings.append(finding)
-                for topic in result.get("topics_detected", []):
-                    all_topics.add(topic)
-                for key in total_scores:
-                    if key in result.get("scores", {}):
-                        total_scores[key].append(result["scores"][key])
-            except Exception:
+        # Fast concurrent analysis: cap to top 5 primary code files
+        files_to_audit = extracted[:5]
+        sem = asyncio.Semaphore(3)
+
+        async def _audit_repo_file(ef):
+            async with sem:
+                try:
+                    res = await audit_code(ef["content"], filename=ef["filename"], language_hint=ef["language"])
+                    return ef, res
+                except Exception:
+                    return ef, None
+
+        audit_pairs = await asyncio.gather(*[_audit_repo_file(ef) for ef in files_to_audit])
+        for ef, result in audit_pairs:
+            if not result:
                 continue
+            file_results.append({
+                "filename": ef["filename"],
+                "language": result.get("language", ef["language"]),
+                "summary": result.get("summary", ""),
+                "scores": result.get("scores", {}),
+                "findings_count": len(result.get("findings", [])),
+            })
+            for finding in result.get("findings", []):
+                finding["source_file"] = ef["filename"]
+                all_findings.append(finding)
+            for topic in result.get("topics_detected", []):
+                all_topics.add(topic)
+            for key in total_scores:
+                if key in result.get("scores", {}):
+                    total_scores[key].append(result["scores"][key])
 
         avg_scores = {k: round(sum(v) / len(v)) if v else 50 for k, v in total_scores.items()}
         languages = [ef["language"] for ef in extracted]
@@ -1043,40 +1066,48 @@ async def audit_standards_zip(
     total_scores = {"security": [], "accessibility": [], "performance": [], "maintainability": [], "overall": [], "standards": []}
     all_checklists, file_results, errors = [], [], []
 
-    for ef in extracted:
-        try:
-            result = await audit_code_with_requirements(
-                ef["content"], requirements,
-                filename=ef["filename"], language_hint=ef["language"]
-            )
+    # Fast concurrent analysis: cap to top 5 primary code files
+    files_to_audit = extracted[:5]
+    sem = asyncio.Semaphore(3)
 
-            file_results.append({
-                "filename": ef["filename"],
-                "language": result.get("language", ef["language"]),
-                "summary": result.get("summary", ""),
-                "scores": result.get("scores", {}),
-                "findings_count": len(result.get("findings", [])),
-                "checklist_pass": sum(1 for c in result.get("requirements_checklist", []) if c["status"] == "pass"),
-                "checklist_total": len(result.get("requirements_checklist", [])),
-            })
+    async def _audit_std_zip_file(ef):
+        async with sem:
+            try:
+                res = await audit_code_with_requirements(
+                    ef["content"], requirements,
+                    filename=ef["filename"], language_hint=ef["language"]
+                )
+                return ef, res
+            except Exception as err:
+                return ef, None
 
-            for finding in result.get("findings", []):
-                finding["source_file"] = ef["filename"]
-                all_findings.append(finding)
+    audit_pairs = await asyncio.gather(*[_audit_std_zip_file(ef) for ef in files_to_audit])
+    for ef, result in audit_pairs:
+        if not result:
+            continue
+        file_results.append({
+            "filename": ef["filename"],
+            "language": result.get("language", ef["language"]),
+            "summary": result.get("summary", ""),
+            "scores": result.get("scores", {}),
+            "findings_count": len(result.get("findings", [])),
+            "checklist_pass": sum(1 for c in result.get("requirements_checklist", []) if c["status"] == "pass"),
+            "checklist_total": len(result.get("requirements_checklist", [])),
+        })
 
-            for topic in result.get("topics_detected", []):
-                all_topics.add(topic)
+        for finding in result.get("findings", []):
+            finding["source_file"] = ef["filename"]
+            all_findings.append(finding)
 
-            for key in total_scores:
-                if key in result.get("scores", {}):
-                    total_scores[key].append(result["scores"][key])
+        for topic in result.get("topics_detected", []):
+            all_topics.add(topic)
 
-            # Merge checklists — keep worst status per requirement
-            for item in result.get("requirements_checklist", []):
-                all_checklists.append(item)
+        for key in total_scores:
+            if key in result.get("scores", {}):
+                total_scores[key].append(result["scores"][key])
 
-        except Exception as e:
-            errors.append({"filename": ef["filename"], "error": str(e)})
+        for item in result.get("requirements_checklist", []):
+            all_checklists.append(item)
 
     avg_scores = {k: round(sum(v) / len(v)) if v else 50 for k, v in total_scores.items()}
 
@@ -1221,39 +1252,48 @@ async def audit_standards_github(
         total_scores = {"security": [], "accessibility": [], "performance": [], "maintainability": [], "overall": [], "standards": []}
         all_checklists, file_results, errors = [], [], []
 
-        for ef in extracted:
-            try:
-                result = await audit_code_with_requirements(
-                    ef["content"], requirements,
-                    filename=ef["filename"], language_hint=ef["language"]
-                )
+        # Fast concurrent analysis: cap to top 5 primary code files
+        files_to_audit = extracted[:5]
+        sem = asyncio.Semaphore(3)
 
-                file_results.append({
-                    "filename": ef["filename"],
-                    "language": result.get("language", ef["language"]),
-                    "summary": result.get("summary", ""),
-                    "scores": result.get("scores", {}),
-                    "findings_count": len(result.get("findings", [])),
-                    "checklist_pass": sum(1 for c in result.get("requirements_checklist", []) if c.get("status") == "pass"),
-                    "checklist_total": len(result.get("requirements_checklist", [])),
-                })
+        async def _audit_std_repo_file(ef):
+            async with sem:
+                try:
+                    res = await audit_code_with_requirements(
+                        ef["content"], requirements,
+                        filename=ef["filename"], language_hint=ef["language"]
+                    )
+                    return ef, res
+                except Exception as err:
+                    return ef, None
 
-                for finding in result.get("findings", []):
-                    finding["source_file"] = ef["filename"]
-                    all_findings.append(finding)
+        audit_pairs = await asyncio.gather(*[_audit_std_repo_file(ef) for ef in files_to_audit])
+        for ef, result in audit_pairs:
+            if not result:
+                continue
+            file_results.append({
+                "filename": ef["filename"],
+                "language": result.get("language", ef["language"]),
+                "summary": result.get("summary", ""),
+                "scores": result.get("scores", {}),
+                "findings_count": len(result.get("findings", [])),
+                "checklist_pass": sum(1 for c in result.get("requirements_checklist", []) if c.get("status") == "pass"),
+                "checklist_total": len(result.get("requirements_checklist", [])),
+            })
 
-                for topic in result.get("topics_detected", []):
-                    all_topics.add(topic)
+            for finding in result.get("findings", []):
+                finding["source_file"] = ef["filename"]
+                all_findings.append(finding)
 
-                for key in total_scores:
-                    if key in result.get("scores", {}):
-                        total_scores[key].append(result["scores"][key])
+            for topic in result.get("topics_detected", []):
+                all_topics.add(topic)
 
-                for item in result.get("requirements_checklist", []):
-                    all_checklists.append(item)
+            for key in total_scores:
+                if key in result.get("scores", {}):
+                    total_scores[key].append(result["scores"][key])
 
-            except Exception as e:
-                errors.append({"filename": ef["filename"], "error": str(e)})
+            for item in result.get("requirements_checklist", []):
+                all_checklists.append(item)
 
         avg_scores = {k: round(sum(v) / len(v)) if v else 50 for k, v in total_scores.items()}
 
